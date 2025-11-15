@@ -44,6 +44,39 @@
       border-radius: 5px;
       cursor: pointer;
     }
+    .info-panel {
+  position: fixed;
+  top: 0;
+  left: -300px; /* 初期は隠す */
+  width: 300px;
+  height: 100%;
+  background: #f9f9f9;
+  border-right: 1px solid #ccc;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+  transition: left 0.3s ease;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.info-panel.open {
+  left: 0; /* スライドイン */
+}
+
+.toggle-btn {
+  position: absolute;
+  top: 10px;
+  right: -40px;
+  width: 40px;
+  height: 40px;
+  background: #1565c0;
+  color: #fff;
+  text-align: center;
+  line-height: 40px;
+  cursor: pointer;
+  border-radius: 0 5px 5px 0;
+}
+
+    
     /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
     .leaflet-control-layers {
       margin-top: 10px;
@@ -63,11 +96,22 @@
     <div id="legend"></div>
     <button id="outbtn">表示中の圃場をGeoJSONで保存</button>
   </div>
+  
+<div id="infoPanel" class="info-panel">
+  <div id="infoToggle" class="toggle-btn">≡</div>
+  <div id="infoContent"></div>
+</div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
+  // トグルボタン制御
+  document.getElementById("infoToggle").addEventListener("click", function() {
+  document.getElementById("infoPanel").classList.toggle("open");
+});
+
+
     // 作物カラーパレット定義
     const cropColors = {
       "主食用きぬむすめ": "#e57373",
@@ -243,7 +287,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               tibanLayerGroup.addLayer(tibanLabel);
             }
 
-            // 圃場クリック時にトグル動作
+            // 圃場クリック時にトグル動作（面積はカウントせず着色のみ）
             lyr.on("click", function(e) {
               const crop = getSelectedCrop();
               const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
@@ -279,26 +323,37 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               })
             });
 
-            // ✅ 元の feature を保持しておく
-            marker.feature = feature;
-
+            marker.feature = feature; // ✅ featureを保持
             markerLayerGroup.addLayer(marker);
 
-marker.on("click", function() {
-  const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
-  if (idx >= 0) {
-    selectedFeatures.splice(idx, 1);
-  } else {
-    selectedFeatures.push({ lyr: marker, feature });
-  }
+            // ✅ ピンをクリックしたときの処理
+            marker.on("click", function() {
+              const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
+              if (idx >= 0) {
+                selectedFeatures.splice(idx, 1);
+              } else {
+                selectedFeatures.push({ lyr: marker, feature });
+              }
 
-  // ✅ ピンの情報を日本語ラベル付きで表示
-  showProperties(feature.properties);
+              // 左情報欄に表示
+              const props = feature.properties;
+              let html = "<table>";
+              for (const key in props) {
+                const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+                html += `<tr>
+                  <td>${jp}</td>
+                  <td>${props[key]}</td>
+                </tr>`;
+              }
+              html += "</table>";
+              document.getElementById("infoContent").innerHTML = html;
 
-  // ✅ 複数選択時は合計面積も表示
-  showSelectedFeatureProperties();
-});
+              // 左パネルを自動で開く
+              document.getElementById("infoPanel").classList.add("open");
 
+              // 複数選択時の合計面積は従来通り右側 details に表示
+              showSelectedFeatureProperties();
+            });
 
             if (feature.properties && feature.properties.Tiban) {
               const tibanLabel = L.marker(latlng, {
@@ -318,7 +373,6 @@ marker.on("click", function() {
     reader.readAsText(file);
   }
 });
-
 // プロパティ表示関数
 function showProperties(props) {
   let html = "<table>";
@@ -357,28 +411,28 @@ function showSelectedFeatureProperties() {
     const props = feature?.properties || {};
     let area = 0;
 
-    if (feature.geometry.type === "Point") {
-      // ✅ ピンなら AreaOnRegistry をそのまま使う
+    if (feature.geometry.type === "Point" && props.Tiban) {
+      // ✅ 地番があるピンだけ面積を表示
       area = parseFloat(props.AreaOnRegistry) || 0;
+      totalArea += area;
+
+      console.log(`No.${index + 1} 地番:`, props.Tiban, "→ 面積:", area);
+
+      html += `<tr>
+        <td>${props.Tiban}</td>
+        <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
+      </tr>`;
     } else {
-      // ❌ ポリゴンは面積を表示しない（着色だけ）
-      area = 0;
+      // ❌ 地番なしは表に加えない
+      console.log(`No.${index + 1} 地番なし → 表に表示しない`);
     }
-
-    console.log(`No.${index + 1} 地番:`, props.Tiban, "→ 面積:", area);
-
-    totalArea += area;
-
-    html += `<tr>
-      <td>${props.Tiban || "(地番なし)"}</td>
-      <td style="text-align:right;">${area ? area.toLocaleString() + " ㎡" : "-"}</td>
-    </tr>`;
   });
 
   html += "</table>";
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
   document.getElementById("details").innerHTML = html;
 }
+
 
     // 強調枠（選択状態を分かりやすくしたい場合用）
     function selectPolygonStyle(lyr) {
