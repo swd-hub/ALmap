@@ -61,9 +61,9 @@
       left: 0; /* スライドイン */
     }
 .toggle-btn {
-  position: absolute;
+  position: fixed;         /* ← 画面に固定 */
   top: 10px;
-  left: 100%;   /* パネルの右端に配置 */
+  left: 10px;              /* ← 画面左上に表示 */
   width: 40px;
   height: 40px;
   background: #1565c0;
@@ -71,8 +71,13 @@
   text-align: center;
   line-height: 40px;
   cursor: pointer;
-  border-radius: 0 5px 5px 0;
-  z-index: 2000; /* 前面に出す */
+  border-radius: 5px;
+  font-size: 20px;
+  z-index: 2000;           /* ← 地図やUIより前面に出す */
+}
+.leaflet-control-zoom {
+  top: 100px !important;   /* ← 位置を下にずらす */
+  left: 10px !important;
 }
 
     /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
