@@ -65,6 +65,8 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
   <script>
     // 作物カラーパレット定義
     const cropColors = {
@@ -221,6 +223,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               fillColor: lyr.options.fillColor,
               fillOpacity: lyr.options.fillOpacity
             });
+
             // 地番ラベル
             let coords;
             if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
@@ -239,6 +242,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               });
               tibanLayerGroup.addLayer(tibanLabel);
             }
+
             // 圃場クリック時にトグル動作
             lyr.on("click", function(e) {
               const crop = getSelectedCrop();
@@ -261,6 +265,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               }
               showSelectedFeatureProperties();
             });
+
           } else if (feature.geometry.type === "Point") {
             const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
             const marker = L.marker(latlng, {
@@ -273,10 +278,28 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                 shadowSize: [41, 41]
               })
             });
+
+            // ✅ 元の feature を保持しておく
+            marker.feature = feature;
+
             markerLayerGroup.addLayer(marker);
-            marker.on("click", function() {
-              showProperties(feature.properties);
-            });
+
+marker.on("click", function() {
+  const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
+  if (idx >= 0) {
+    selectedFeatures.splice(idx, 1);
+  } else {
+    selectedFeatures.push({ lyr: marker, feature });
+  }
+
+  // ✅ ピンの情報を日本語ラベル付きで表示
+  showProperties(feature.properties);
+
+  // ✅ 複数選択時は合計面積も表示
+  showSelectedFeatureProperties();
+});
+
+
             if (feature.properties && feature.properties.Tiban) {
               const tibanLabel = L.marker(latlng, {
                 icon: L.divIcon({
@@ -301,37 +324,61 @@ function showProperties(props) {
   let html = "<table>";
   for (const key in props) {
     const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-    html += `<tr><td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td><td>${props[key]}</td></tr>`;
+    html += `<tr>
+      <td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td>
+      <td>${props[key]}</td>
+    </tr>`;
   }
   html += "</table>";
   document.getElementById("details").innerHTML = html;
 }
 
-    // 複数選択フィーチャ用: 地番・面積と合計のみ
-    function showSelectedFeatureProperties() {
-      if (selectedFeatures.length === 0) {
-        document.getElementById("details").innerHTML = 'GeoJSONファイルを選択し、圃場をクリックしてください';
-        return;
-      } else if (selectedFeatures.length === 1) {
-        showProperties(selectedFeatures[0].feature.properties);
-        return;
-      }
-      let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択圃場数: ${selectedFeatures.length}</div>`;
-      let totalArea = 0;
-      html += "<table>";
-      selectedFeatures.forEach(({feature}) => {
-        const props = feature.properties;
-        const area = parseFloat(props.AreaOnRegistry) || 0;
-        totalArea += area;
-        html += `<tr>
-          <td>${props.Tiban || ""}</td>
-          <td style="text-align:right;">${props.AreaOnRegistry || "0"} ㎡</td>
-        </tr>`;
-      });
-      html += "</table>";
-      html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡</div>`;
-      document.getElementById("details").innerHTML = html;
+
+// 複数選択フィーチャ用: 地番・面積と合計（属性 AreaOnRegistry を使用）
+function showSelectedFeatureProperties() {
+  if (selectedFeatures.length === 0) {
+    document.getElementById("details").innerHTML =
+      "GeoJSONファイルを選択し、圃場をクリックしてください";
+    return;
+  } else if (selectedFeatures.length === 1) {
+    console.log("1件選択:", selectedFeatures[0]);
+    showProperties(selectedFeatures[0].feature?.properties || {});
+    return;
+  }
+
+  console.log("選択されたフィーチャ一覧:", selectedFeatures);
+
+  let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択ピン数: ${selectedFeatures.length}</div>`;
+  let totalArea = 0;
+  html += "<table>";
+
+  selectedFeatures.forEach((item, index) => {
+    const feature = item.feature;
+    const props = feature?.properties || {};
+    let area = 0;
+
+    if (feature.geometry.type === "Point") {
+      // ✅ ピンなら AreaOnRegistry をそのまま使う
+      area = parseFloat(props.AreaOnRegistry) || 0;
+    } else {
+      // ❌ ポリゴンは面積を表示しない（着色だけ）
+      area = 0;
     }
+
+    console.log(`No.${index + 1} 地番:`, props.Tiban, "→ 面積:", area);
+
+    totalArea += area;
+
+    html += `<tr>
+      <td>${props.Tiban || "(地番なし)"}</td>
+      <td style="text-align:right;">${area ? area.toLocaleString() + " ㎡" : "-"}</td>
+    </tr>`;
+  });
+
+  html += "</table>";
+  html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
+  document.getElementById("details").innerHTML = html;
+}
 
     // 強調枠（選択状態を分かりやすくしたい場合用）
     function selectPolygonStyle(lyr) {
@@ -340,6 +387,7 @@ function showProperties(props) {
         weight: 4
       });
     }
+    
     function restorePolygonStyle(lyr) {
       const orig = originalPolygonStyles.get(lyr) || {};
       lyr.setStyle && lyr.setStyle({
