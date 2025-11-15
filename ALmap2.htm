@@ -112,16 +112,50 @@
   
 <div id="infoPanel" class="info-panel">
   <div id="infoToggle" class="toggle-btn">≡</div>
-  <div id="infoContent"></div>
-  <div id="infoResizer"></div> <!-- ← これを追加 -->
+  <div id="infoContent">
+    <!-- 詳細表示（ピンの属性など） -->
+    <div id="propertyDetails"></div>
+    <!-- 面積表 -->
+    <div id="selectedTable"></div>
+    <!-- リセットボタン -->
+    <button id="resetSelectionBtn">選択をリセット</button>
+  </div>
+  <div id="infoResizer"></div>
 </div>
-
 
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
+
+  function updateSelectedTable(features) {
+  const tableContainer = document.getElementById("selectedTable");
+  tableContainer.innerHTML = ""; // 前の表を消す
+
+  let html = "<table><tr><th>地番</th><th>面積</th></tr>";
+  let total = 0;
+
+  for (const f of features) {
+    const props = f.feature.properties;
+    html += `<tr><td>${props.Tiban}</td><td>${props.Area} m²</td></tr>`;
+    total += props.Area;
+  }
+
+  html += "</table>";
+  html += `<p>選択ピン数: ${features.length}</p>`;
+  html += `<p>合計面積: ${total} m² (${(total / 10000).toFixed(4)} ha)</p>`;
+
+  tableContainer.innerHTML = html;
+}
+
+document.getElementById("resetSelectionBtn").addEventListener("click", function() {
+  selectedFeatures = [];
+  updateSelectedTable(selectedFeatures);
+});
+
+
+  
 // DOMが読み込まれてから実行
 document.addEventListener("DOMContentLoaded", function() {
   // トグルボタン制御
@@ -155,21 +189,23 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // ピンをクリックしたときに左パネルを開いて情報表示
-function showProperties(props) {
+function showProperties(props, feature) {
+  // 詳細表示（左パネル上部）
   let html = "<table>";
   for (const key in props) {
     const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-    html += `<tr>
-      <td>${jp}</td>
-      <td>${props[key]}</td>
-    </tr>`;
+    html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
   }
   html += "</table>";
-  document.getElementById("infoContent").innerHTML = html;
-
-  // ✅ ピンをクリックしたら自動で左パネルを開く
+  document.getElementById("propertyDetails").innerHTML = html;
+  // ✅ 左パネルを開く
   document.getElementById("infoPanel").classList.add("open");
+  // ✅ 選択ピンに追加（重複チェックなし）
+  selectedFeatures.push({ feature });
+  // ✅ 面積表を更新
+  updateSelectedTable(selectedFeatures);
 }
+
 
 
 
@@ -437,16 +473,16 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
 // プロパティ表示関数
 function showProperties(props) {
   let html = "<table>";
-  for (const key in props) {
-    const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-    html += `<tr>
-      <td>${jp}</td>
-      <td>${props[key]}</td>
-    </tr>`;
+  for (const key of propertyOrder) {
+    if (props[key] !== undefined) {
+      const jp = propertyLabels[key] || "（訳なし）";
+      html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
+    }
   }
   html += "</table>";
-  document.getElementById("infoContent").innerHTML = html; // ✅ 左パネルに表示
+  document.getElementById("propertyDetails").innerHTML = html;
 }
+
 
 
 
