@@ -379,13 +379,15 @@ function showProperties(props) {
   for (const key in props) {
     const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
     html += `<tr>
-      <td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td>
+      <td>${jp}</td>
       <td>${props[key]}</td>
     </tr>`;
   }
   html += "</table>";
-  document.getElementById("details").innerHTML = html;
+  document.getElementById("infoContent").innerHTML = html; // ✅ 左パネルに表示
 }
+
+
 
 
 // 複数選択フィーチャ用: 地番・面積と合計（属性 AreaOnRegistry を使用）
@@ -396,7 +398,7 @@ function showSelectedFeatureProperties() {
     return;
   } else if (selectedFeatures.length === 1) {
     console.log("1件選択:", selectedFeatures[0]);
-    showProperties(selectedFeatures[0].feature?.properties || {});
+    // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
     return;
   }
 
@@ -412,26 +414,21 @@ function showSelectedFeatureProperties() {
     let area = 0;
 
     if (feature.geometry.type === "Point" && props.Tiban) {
-      // ✅ 地番があるピンだけ面積を表示
       area = parseFloat(props.AreaOnRegistry) || 0;
       totalArea += area;
-
-      console.log(`No.${index + 1} 地番:`, props.Tiban, "→ 面積:", area);
 
       html += `<tr>
         <td>${props.Tiban}</td>
         <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
       </tr>`;
-    } else {
-      // ❌ 地番なしは表に加えない
-      console.log(`No.${index + 1} 地番なし → 表に表示しない`);
     }
   });
 
   html += "</table>";
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
-  document.getElementById("details").innerHTML = html;
+  document.getElementById("details").innerHTML = html; // ✅ 右パネルに表示
 }
+
 
 
     // 強調枠（選択状態を分かりやすくしたい場合用）
