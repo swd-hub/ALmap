@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>作物ごとに色分け圃場ハイライト＋ファイル入出力サンプル</title>
+  <title>圃場ハイライト＋地図/衛星切替＋ファイル入出力サンプル</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { display: flex; margin: 0; }
@@ -26,7 +26,12 @@
       cursor: pointer;
     }
     #legend span {
-      display:inline-block;width:18px;height:18px;border-radius:3px;margin-right:4px;vertical-align:middle;
+      display:inline-block;
+      width:18px;
+      height:18px;
+      border-radius:3px;
+      margin-right:4px;
+      vertical-align:middle;
       border:1px solid #333;
     }
     #outbtn {
@@ -39,8 +44,14 @@
       border-radius: 5px;
       cursor: pointer;
     }
+    /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
+    .leaflet-control-layers {
+      margin-top: 10px;
+      margin-right: 10px;
+    }
   </style>
 </head>
+
 <body>
   <div id="map"></div>
   <div id="info">
@@ -71,7 +82,6 @@
       "さつまいも": "#f4511e",
       "大豆": "#789262",
       "その他": "#bdbdbd"
-      // 任意追加OK
     };
 
     // UI：作物選択ラジオ
@@ -143,10 +153,18 @@
       ShikuchosonCode: "市区町村コード"
     };
 
+
+    // --- ベースレイヤー定義 ---
     const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: "© OpenStreetMap"
     });
+    const esriSat = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "Tiles © Esri"
+      }
+    );
 
+    // マップ初期化（デフォルトは OSM）
     const map = L.map("map", {
       center: [35.404, 132.825], zoom: 16, layers: [osm]
     });
@@ -156,134 +174,138 @@
     const markerLayerGroup  = L.layerGroup().addTo(map);
     const tibanLayerGroup   = L.layerGroup().addTo(map);
 
+    // ベースレイヤーとオーバーレイをまとめてコントロールに追加
+    const baseMaps = { "地図": osm, "衛星画像": esriSat };
+    const overlayMaps = {
+      "筆ポリゴン": polygonLayerGroup,
+      "農地ピン": markerLayerGroup,
+      "地番ラベル": tibanLayerGroup
+    };
+    L.control.layers(baseMaps, overlayMaps).addTo(map);
+
     // 選択されたポリゴン一覧
-    let selectedFeatures = []; // {lyr, feature}
-    // 選択レイヤのデフォルトスタイル保存用
+    let selectedFeatures = [];
     const originalPolygonStyles = new WeakMap();
 
-    // ファイル読み込み
-    document.getElementById("fileInput").addEventListener("change", function(event) {
-      const files = event.target.files;
-      for (const file of files) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          let geojson;
-          try {
-            geojson = JSON.parse(e.target.result);
-          } catch {
-            alert("ファイルの読み込みに失敗: " + file.name);
-            return;
+// ファイル読み込み処理
+document.getElementById("fileInput").addEventListener("change", function(event) {
+  const files = event.target.files;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      let geojson;
+      try {
+        geojson = JSON.parse(e.target.result);
+      } catch {
+        alert("ファイルの読み込みに失敗: " + file.name);
+        return;
+      }
+      L.geoJSON(geojson, {
+        style: function(feature) {
+          if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+            const crop = feature.properties?.SelectedCrop;
+            return {
+              color: "#d00",
+              weight: 2,
+              fillColor: cropColors[crop] || "#e88",
+              fillOpacity: crop && cropColors[crop] ? 0.7 : 0.3
+            };
           }
-          L.geoJSON(geojson, {
-            style: function(feature) {
-              // デフォルトは薄赤
-              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
-                // すでに作物付与済みなら色反映
-                const crop = feature.properties?.SelectedCrop;
-                return {
-                  color: "#d00",
-                  weight: 2,
-                  fillColor: cropColors[crop] || "#e88",
-                  fillOpacity: crop && cropColors[crop] ? 0.7 : 0.3
-                };
-              }
-            },
-            onEachFeature: function(feature, lyr) {
-              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
-                polygonLayerGroup.addLayer(lyr);
-                originalPolygonStyles.set(lyr, {
-                  color: lyr.options.color,
-                  weight: lyr.options.weight,
-                  fillColor: lyr.options.fillColor,
-                  fillOpacity: lyr.options.fillOpacity
-                });
-                // 地番ラベル（最初の座標を使用）
-                let coords;
-                if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
-                  coords = feature.geometry.coordinates[0][0];
-                } else if (feature.geometry.type === "MultiPolygon" && feature.geometry.coordinates.length>0) {
-                  coords = feature.geometry.coordinates[0][0][0];
-                }
-                if (coords) {
-                  const tibanLabel = L.marker([coords[1], coords[0]], {
-                    icon: L.divIcon({
-                      className: "tiban-label",
-                      html: String(feature.properties?.Tiban || ""),
-                      iconSize: null
-                    }),
-                    interactive: false
-                  });
-                  tibanLayerGroup.addLayer(tibanLabel);
-                }
-                // 圃場クリック時にトグル動作
-                lyr.on('click', function (e) {
-                  const crop = getSelectedCrop();
-                  const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
-                  if (idx >= 0) {
-                    // 既に選択済み→解除
-                    restorePolygonStyle(lyr);
-                    selectedFeatures.splice(idx, 1);
-                  } else {
-                    // 新規選択→着色
-                    if (crop && cropColors[crop]) {
-                      lyr.setStyle({
-                        fillColor: cropColors[crop],
-                        fillOpacity: 0.7,
-                        color: "#111",
-                        weight: 3
-                      });
-                      feature.properties.SelectedCrop = crop;
-                    }
-                    selectPolygonStyle(lyr);
-                    selectedFeatures.push({lyr, feature});
-                  }
-                  showSelectedFeatureProperties();
-                });
-              } else if (feature.geometry.type === "Point") {
-                const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
-                const marker = L.marker(latlng, {
-                  icon: L.icon({
-                    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-                    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-                    iconSize: [25,41],
-                    iconAnchor: [12,41],
-                    popupAnchor: [1,-34],
-                    shadowSize: [41,41]
-                  })
-                });
-                markerLayerGroup.addLayer(marker);
-                marker.on('click', function () {
-                  // ポリゴンの選択状態は残す
-                  showProperties(feature.properties);
-                });
-                if (feature.properties && feature.properties.Tiban) {
-                  const tibanLabel = L.marker(latlng, {
-                    icon: L.divIcon({
-                      className: "tiban-label",
-                      html: String(feature.properties.Tiban),
-                      iconSize: null
-                    }),
-                    interactive: false
-                  });
-                  tibanLayerGroup.addLayer(tibanLabel);
-                }
-              }
+        },
+        onEachFeature: function(feature, lyr) {
+          if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+            polygonLayerGroup.addLayer(lyr);
+            originalPolygonStyles.set(lyr, {
+              color: lyr.options.color,
+              weight: lyr.options.weight,
+              fillColor: lyr.options.fillColor,
+              fillOpacity: lyr.options.fillOpacity
+            });
+            // 地番ラベル
+            let coords;
+            if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
+              coords = feature.geometry.coordinates[0][0];
+            } else if (feature.geometry.type === "MultiPolygon" && feature.geometry.coordinates.length > 0) {
+              coords = feature.geometry.coordinates[0][0][0];
             }
-          });
-        };
-        reader.readAsText(file);
-      }
-    });
+            if (coords) {
+              const tibanLabel = L.marker([coords[1], coords[0]], {
+                icon: L.divIcon({
+                  className: "tiban-label",
+                  html: String(feature.properties?.Tiban || ""),
+                  iconSize: null
+                }),
+                interactive: false
+              });
+              tibanLayerGroup.addLayer(tibanLabel);
+            }
+            // 圃場クリック時にトグル動作
+            lyr.on("click", function(e) {
+              const crop = getSelectedCrop();
+              const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
+              if (idx >= 0) {
+                restorePolygonStyle(lyr);
+                selectedFeatures.splice(idx, 1);
+              } else {
+                if (crop && cropColors[crop]) {
+                  lyr.setStyle({
+                    fillColor: cropColors[crop],
+                    fillOpacity: 0.7,
+                    color: "#111",
+                    weight: 3
+                  });
+                  feature.properties.SelectedCrop = crop;
+                }
+                selectPolygonStyle(lyr);
+                selectedFeatures.push({ lyr, feature });
+              }
+              showSelectedFeatureProperties();
+            });
+          } else if (feature.geometry.type === "Point") {
+            const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+            const marker = L.marker(latlng, {
+              icon: L.icon({
+                iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+                shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+              })
+            });
+            markerLayerGroup.addLayer(marker);
+            marker.on("click", function() {
+              showProperties(feature.properties);
+            });
+            if (feature.properties && feature.properties.Tiban) {
+              const tibanLabel = L.marker(latlng, {
+                icon: L.divIcon({
+                  className: "tiban-label",
+                  html: String(feature.properties.Tiban),
+                  iconSize: null
+                }),
+                interactive: false
+              });
+              tibanLayerGroup.addLayer(tibanLabel);
+            }
+          }
+        }
+      });
+    };
+    reader.readAsText(file);
+  }
+});
 
-    function showProperties(props) {
-      let html = "<table>";
-      for (const key in props) {
-        const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-        html += `<tr><td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td><td>${props[key]}</td></tr>`;
-      }
-      html += "</table>";
-      document.getElementById("details").innerHTML = html;
-    }
+// プロパティ表示関数
+function showProperties(props) {
+  let html = "<table>";
+  for (const key in props) {
+    const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+    html += `<tr><td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td><td>${props[key]}</td></tr>`;
+  }
+  html += "</table>";
+  document.getElementById("details").innerHTML = html;
+}
 
     // 複数選択フィーチャ用: 地番・面積と合計のみ
     function showSelectedFeatureProperties() {
@@ -339,6 +361,7 @@
       dlAnchor.click();
       document.body.removeChild(dlAnchor);
     });
+    
   </script>
 </body>
 </html>
