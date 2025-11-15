@@ -115,7 +115,10 @@
     const markerLayerGroup  = L.layerGroup().addTo(map);
     const tibanLayerGroup   = L.layerGroup().addTo(map);
 
-    let highlightLayer = null; // 現在のハイライト用
+    // 選択されたポリゴン一覧
+    let selectedFeatures = []; // {lyr, feature}
+    // 選択レイヤのデフォルトスタイル保存用
+    const originalPolygonStyles = new WeakMap();
 
     // ファイル読み込み
     document.getElementById("fileInput").addEventListener("change", function(event) {
@@ -145,9 +148,14 @@
               }
             },
             onEachFeature: function(feature, lyr) {
-              // ポリゴン/マルチポリゴン/ポイント共通
               if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
                 polygonLayerGroup.addLayer(lyr);
+                originalPolygonStyles.set(lyr, {
+                  color: lyr.options.color,
+                  weight: lyr.options.weight,
+                  fillColor: lyr.options.fillColor,
+                  fillOpacity: lyr.options.fillOpacity
+                });
                 // 地番ラベル（最初の座標を使用）
                 let coords;
                 if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
@@ -166,23 +174,31 @@
                   });
                   tibanLayerGroup.addLayer(tibanLabel);
                 }
-                // クリック：作物着色&プロパティ表示&ハイライト
-                lyr.on('click', function () {
+                // 圃場クリック時にトグル動作
+                lyr.on('click', function (e) {
                   const crop = getSelectedCrop();
-                  if (crop && cropColors[crop]) {
-                    lyr.setStyle({
-                      fillColor: cropColors[crop],
-                      fillOpacity: 0.7,
-                      color: "#111",
-                      weight: 3
-                    });
-                    feature.properties.SelectedCrop = crop;
+                  const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
+                  if (idx >= 0) {
+                    // 既に選択済み→解除
+                    restorePolygonStyle(lyr);
+                    selectedFeatures.splice(idx, 1);
+                  } else {
+                    // 新規選択→着色
+                    if (crop && cropColors[crop]) {
+                      lyr.setStyle({
+                        fillColor: cropColors[crop],
+                        fillOpacity: 0.7,
+                        color: "#111",
+                        weight: 3
+                      });
+                      feature.properties.SelectedCrop = crop;
+                    }
+                    selectPolygonStyle(lyr);
+                    selectedFeatures.push({lyr, feature});
                   }
-                  showProperties(feature.properties);
-                  highlightFeature(feature);
+                  showSelectedFeatureProperties();
                 });
-              }
-              else if (feature.geometry.type === "Point") {
+              } else if (feature.geometry.type === "Point") {
                 const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
                 const marker = L.marker(latlng, {
                   icon: L.icon({
@@ -196,6 +212,7 @@
                 });
                 markerLayerGroup.addLayer(marker);
                 marker.on('click', function () {
+                  // ポリゴンの選択状態は残す
                   showProperties(feature.properties);
                 });
                 if (feature.properties && feature.properties.Tiban) {
@@ -227,20 +244,47 @@
       document.getElementById("details").innerHTML = html;
     }
 
-    // ハイライト処理
-    function highlightFeature(feature) {
-      if (highlightLayer) {
-        map.removeLayer(highlightLayer);
-        highlightLayer = null;
+    // 複数選択フィーチャ用: 地番・面積と合計のみ
+    function showSelectedFeatureProperties() {
+      if (selectedFeatures.length === 0) {
+        document.getElementById("details").innerHTML = 'GeoJSONファイルを選択し、圃場をクリックしてください';
+        return;
+      } else if (selectedFeatures.length === 1) {
+        showProperties(selectedFeatures[0].feature.properties);
+        return;
       }
-      const highlightStyle = {
-        color: '#0057ff',
-        weight: 4,
-        fillColor: '#3399ff',
-        fillOpacity: 0.3
-      };
-      highlightLayer = L.geoJSON(feature, { style: highlightStyle });
-      highlightLayer.addTo(map);
+      let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択圃場数: ${selectedFeatures.length}</div>`;
+      let totalArea = 0;
+      html += "<table>";
+      selectedFeatures.forEach(({feature}) => {
+        const props = feature.properties;
+        const area = parseFloat(props.AreaOnRegistry) || 0;
+        totalArea += area;
+        html += `<tr>
+          <td>${props.Tiban || ""}</td>
+          <td style="text-align:right;">${props.AreaOnRegistry || "0"} ㎡</td>
+        </tr>`;
+      });
+      html += "</table>";
+      html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡</div>`;
+      document.getElementById("details").innerHTML = html;
+    }
+
+    // 強調枠（選択状態を分かりやすくしたい場合用）
+    function selectPolygonStyle(lyr) {
+      lyr.setStyle && lyr.setStyle({
+        color: "#0057ff",
+        weight: 4
+      });
+    }
+    function restorePolygonStyle(lyr) {
+      const orig = originalPolygonStyles.get(lyr) || {};
+      lyr.setStyle && lyr.setStyle({
+        color: orig.color || "#d00",
+        weight: orig.weight || 2,
+        fillColor: orig.fillColor || "#e88",
+        fillOpacity: orig.fillOpacity || 0.3
+      });
     }
 
     // 圃場GeoJSONを書き出す
