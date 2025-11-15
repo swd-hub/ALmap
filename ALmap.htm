@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>KML取り込み＋情報パネル＋地図切替＋地番ラベル</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { display: flex; margin: 0; }
+    #map { width: 70%; height: 100vh; }
+    #info { width: 30%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
+    table { border-collapse: collapse; width: 100%; }
+    td { border: 1px solid #ccc; padding: 4px; }
+    .tiban-label {
+      background: rgba(255,255,255,0.8);
+      padding: 2px 4px;
+      border: 1px solid #333;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <h3>選択した情報</h3>
+    <div id="details">KMLファイルを選択し、ピンやポリゴンをクリックしてください</div>
+    <hr>
+    <input type="file" id="fileInput" accept=".kml" multiple />
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-kml@1.0.1/L.KML.js"></script>
+
+  <script>
+    // 通常地図と衛星画像
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap"
+    });
+    const esriSat = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "Tiles © Esri"
+      }
+    );
+
+    const map = L.map("map", {
+      center: [35.4, 132.75], zoom: 13, layers: [osm]
+    });
+
+    // レイヤコントロール
+    const baseMaps = { "地図": osm, "衛星画像": esriSat };
+    const overlayMaps = {};
+    L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+    const kmlLayerGroup = L.layerGroup().addTo(map);
+    const tibanLayerGroup = L.layerGroup();
+    overlayMaps["地番ラベル"] = tibanLayerGroup; // トグル対象に追加
+
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const files = event.target.files;
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const kmlText = e.target.result;
+          const parser = new DOMParser();
+          const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+
+          const kmlLayer = new L.KML(kmlDoc);
+
+          kmlLayer.eachLayer(layer => {
+            if (layer.unbindPopup) layer.unbindPopup();
+
+            // クリックで情報パネルに表示
+            layer.on("click", () => {
+              let html = "<table>";
+              const props = layer.feature?.properties || {};
+
+              // description全文
+              if (props.description) {
+                html += `<tr><td colspan="2">${props.description}</td></tr>`;
+              }
+
+              // ExtendedDataの主要項目
+              const showKeys = [
+                "FarmCommitteeName",
+                "Address",
+                "Tiban",
+                "AreaOnRegistry",
+                "ClassificationOfLandCodeName",
+                "UsageSituationInvestigationResultCodeName",
+                "DaichoId",
+                "polygon_uuid",
+                "daicho_shubetsu_cd"
+              ];
+              showKeys.forEach(key => {
+                if (props[key]) {
+                  html += `<tr><td>${key}</td><td>${props[key]}</td></tr>`;
+                }
+              });
+
+              html += "</table>";
+              document.getElementById("details").innerHTML = html;
+            });
+
+            // 地番ラベルを地図に追加
+            const props = layer.feature?.properties || {};
+            if (props.Tiban) {
+              const center = layer.getBounds().getCenter();
+              const label = L.marker(center, {
+                icon: L.divIcon({
+                  className: "tiban-label",
+                  html: props.Tiban,
+                  iconSize: [30, 20]
+                })
+              });
+              tibanLayerGroup.addLayer(label);
+            }
+          });
+
+          kmlLayerGroup.addLayer(kmlLayer);
+          map.fitBounds(kmlLayer.getBounds());
+        };
+        reader.readAsText(file);
+      });
+    });
+  </script>
+</body>
+</html>
