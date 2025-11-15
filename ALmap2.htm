@@ -45,27 +45,25 @@
       cursor: pointer;
     }
     .info-panel {
-  position: fixed;
-  top: 0;
-  left: -300px; /* 初期は隠す */
-  width: 300px;
-  height: 100%;
-  background: #f9f9f9;
-  border-right: 1px solid #ccc;
-  box-shadow: 2px 0 5px rgba(0,0,0,0.2);
-  transition: left 0.3s ease;
-  overflow-y: auto;
-  z-index: 1000;
-}
-
-.info-panel.open {
-  left: 0; /* スライドイン */
-}
-
+      position: fixed;
+      top: 0;
+      left: -300px; /* 初期は隠す */
+      width: 300px;
+      height: 100%;
+      background: #f9f9f9;
+      border-right: 1px solid #ccc;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+      transition: left 0.3s ease;
+      overflow-y: auto;
+      z-index: 1000;
+    }
+    .info-panel.open {
+      left: 0; /* スライドイン */
+    }
 .toggle-btn {
   position: absolute;
   top: 10px;
-  right: -40px;
+  left: 100%;   /* パネルの右端に配置 */
   width: 40px;
   height: 40px;
   background: #1565c0;
@@ -74,14 +72,24 @@
   line-height: 40px;
   cursor: pointer;
   border-radius: 0 5px 5px 0;
+  z-index: 2000; /* 前面に出す */
 }
 
-    
     /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
     .leaflet-control-layers {
       margin-top: 10px;
       margin-right: 10px;
     }
+  #infoResizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: rgba(0,0,0,0.05);
+}
+
   </style>
 </head>
 
@@ -100,16 +108,64 @@
 <div id="infoPanel" class="info-panel">
   <div id="infoToggle" class="toggle-btn">≡</div>
   <div id="infoContent"></div>
+  <div id="infoResizer"></div> <!-- ← これを追加 -->
 </div>
+
+
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
+// DOMが読み込まれてから実行
+document.addEventListener("DOMContentLoaded", function() {
   // トグルボタン制御
   document.getElementById("infoToggle").addEventListener("click", function() {
-  document.getElementById("infoPanel").classList.toggle("open");
+    document.getElementById("infoPanel").classList.toggle("open");
+  });
+
+  const panel = document.getElementById("infoPanel");
+  const resizer = document.getElementById("infoResizer");
+
+  let isResizing = false;
+
+  // リサイズバーをドラッグ開始
+  resizer.addEventListener("mousedown", function(e) {
+    isResizing = true;
+    document.body.style.cursor = "ew-resize";
+  });
+
+  // ドラッグ中に幅を変更
+  document.addEventListener("mousemove", function(e) {
+    if (!isResizing) return;
+    const newWidth = Math.min(Math.max(e.clientX, 200), 600); // 最小200px 最大600px
+    panel.style.width = newWidth + "px";
+  });
+
+  // ドラッグ終了
+  document.addEventListener("mouseup", function() {
+    isResizing = false;
+    document.body.style.cursor = "default";
+  });
 });
+
+// ピンをクリックしたときに左パネルを開いて情報表示
+function showProperties(props) {
+  let html = "<table>";
+  for (const key in props) {
+    const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+    html += `<tr>
+      <td>${jp}</td>
+      <td>${props[key]}</td>
+    </tr>`;
+  }
+  html += "</table>";
+  document.getElementById("infoContent").innerHTML = html;
+
+  // ✅ ピンをクリックしたら自動で左パネルを開く
+  document.getElementById("infoPanel").classList.add("open");
+}
+
 
 
     // 作物カラーパレット定義
