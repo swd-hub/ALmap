@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>作物ごとに色分け圃場ハイライト＋ファイル入出力サンプル</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { display: flex; margin: 0; }
+    #map { width: 70%; height: 100vh; }
+    #info { width: 30%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
+    table { border-collapse: collapse; width: 100%; }
+    td { border: 1px solid #ccc; padding: 4px; }
+    .tiban-label {
+      background: rgba(255,255,255,0.85);
+      padding: 2px 8px;
+      border: 1px solid #333;
+      border-radius: 3px;
+      font-size: 14px;
+      pointer-events: none;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    #legend label {
+      margin: 4px;
+      display: inline-block;
+      cursor: pointer;
+    }
+    #legend span {
+      display:inline-block;width:18px;height:18px;border-radius:3px;margin-right:4px;vertical-align:middle;
+      border:1px solid #333;
+    }
+    #outbtn {
+      margin: 8px 0;
+      width: 100%;
+      height: 36px;
+      font-size: 16px;
+      background: #f8c363;
+      border: 1px solid #d98400;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="info">
+    <h3>選択した情報</h3>
+    <div id="details">GeoJSONファイルを選択し、圃場をクリックしてください</div>
+    <hr>
+    <input type="file" id="fileInput" accept=".geojson,.json" multiple />
+    <hr>
+    <div id="legend"></div>
+    <button id="outbtn">表示中の圃場をGeoJSONで保存</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // 作物カラーパレット定義
+    const cropColors = {
+      "主食用きぬむすめ": "#e57373",
+      "主食用こしひかり": "#f06292",
+      "稲WCS用きぬむすめ": "#ba68c8",
+      "稲WCS用つきはやか": "#64b5f6",
+      "飼料用米": "#4dd0e1",
+      "大麦": "#4db6ac",
+      "小麦": "#81c784",
+      "ブロッコリー": "#dce775",
+      "タマネギ": "#ffd54f",
+      "デントコーン": "#ffb74d",
+      "はとむぎ": "#a1887f",
+      "さつまいも": "#f4511e",
+      "大豆": "#789262",
+      "その他": "#bdbdbd"
+      // 任意追加OK
+    };
+
+    // UI：作物選択ラジオ
+    function createCropLegend(crops) {
+      const legendDiv = document.getElementById("legend");
+      let html = "<h4>作物（ラジオ選択して圃場着色）</h4>";
+      crops.forEach((crop, i) => {
+        html += `<label>
+          <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
+          <span style="background:${cropColors[crop]};"></span>
+          ${crop}
+        </label><br>`;
+      });
+      legendDiv.innerHTML = html;
+    }
+    createCropLegend(Object.keys(cropColors));
+
+    function getSelectedCrop() {
+      const checked = document.querySelector('input[name="crop"]:checked');
+      return checked ? checked.value : null;
+    }
+
+    // 英→日ラベル辞書（必要に応じて追加）
+    const propertyLabels = {
+      Tiban: "地番",
+      AreaOnRegistry: "面積（㎡）",
+      SelectedCrop: "作物"
+      // ... 任意追加
+    };
+
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap"
+    });
+
+    const map = L.map("map", {
+      center: [35.404, 132.825], zoom: 16, layers: [osm]
+    });
+
+    // レイヤグループ
+    const polygonLayerGroup = L.layerGroup().addTo(map);
+    const markerLayerGroup  = L.layerGroup().addTo(map);
+    const tibanLayerGroup   = L.layerGroup().addTo(map);
+
+    let highlightLayer = null; // 現在のハイライト用
+
+    // ファイル読み込み
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      const files = event.target.files;
+      for (const file of files) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          let geojson;
+          try {
+            geojson = JSON.parse(e.target.result);
+          } catch {
+            alert("ファイルの読み込みに失敗: " + file.name);
+            return;
+          }
+          L.geoJSON(geojson, {
+            style: function(feature) {
+              // デフォルトは薄赤
+              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+                // すでに作物付与済みなら色反映
+                const crop = feature.properties?.SelectedCrop;
+                return {
+                  color: "#d00",
+                  weight: 2,
+                  fillColor: cropColors[crop] || "#e88",
+                  fillOpacity: crop && cropColors[crop] ? 0.7 : 0.3
+                };
+              }
+            },
+            onEachFeature: function(feature, lyr) {
+              // ポリゴン/マルチポリゴン/ポイント共通
+              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+                polygonLayerGroup.addLayer(lyr);
+                // 地番ラベル（最初の座標を使用）
+                let coords;
+                if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
+                  coords = feature.geometry.coordinates[0][0];
+                } else if (feature.geometry.type === "MultiPolygon" && feature.geometry.coordinates.length>0) {
+                  coords = feature.geometry.coordinates[0][0][0];
+                }
+                if (coords) {
+                  const tibanLabel = L.marker([coords[1], coords[0]], {
+                    icon: L.divIcon({
+                      className: "tiban-label",
+                      html: String(feature.properties?.Tiban || ""),
+                      iconSize: null
+                    }),
+                    interactive: false
+                  });
+                  tibanLayerGroup.addLayer(tibanLabel);
+                }
+                // クリック：作物着色&プロパティ表示&ハイライト
+                lyr.on('click', function () {
+                  const crop = getSelectedCrop();
+                  if (crop && cropColors[crop]) {
+                    lyr.setStyle({
+                      fillColor: cropColors[crop],
+                      fillOpacity: 0.7,
+                      color: "#111",
+                      weight: 3
+                    });
+                    feature.properties.SelectedCrop = crop;
+                  }
+                  showProperties(feature.properties);
+                  highlightFeature(feature);
+                });
+              }
+              else if (feature.geometry.type === "Point") {
+                const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                const marker = L.marker(latlng, {
+                  icon: L.icon({
+                    iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+                    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+                    iconSize: [25,41],
+                    iconAnchor: [12,41],
+                    popupAnchor: [1,-34],
+                    shadowSize: [41,41]
+                  })
+                });
+                markerLayerGroup.addLayer(marker);
+                marker.on('click', function () {
+                  showProperties(feature.properties);
+                });
+                if (feature.properties && feature.properties.Tiban) {
+                  const tibanLabel = L.marker(latlng, {
+                    icon: L.divIcon({
+                      className: "tiban-label",
+                      html: String(feature.properties.Tiban),
+                      iconSize: null
+                    }),
+                    interactive: false
+                  });
+                  tibanLayerGroup.addLayer(tibanLabel);
+                }
+              }
+            }
+          });
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    function showProperties(props) {
+      let html = "<table>";
+      for (const key in props) {
+        const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+        html += `<tr><td>${key}<br><span style='font-size:11px;color:#444'>${jp}</span></td><td>${props[key]}</td></tr>`;
+      }
+      html += "</table>";
+      document.getElementById("details").innerHTML = html;
+    }
+
+    // ハイライト処理
+    function highlightFeature(feature) {
+      if (highlightLayer) {
+        map.removeLayer(highlightLayer);
+        highlightLayer = null;
+      }
+      const highlightStyle = {
+        color: '#0057ff',
+        weight: 4,
+        fillColor: '#3399ff',
+        fillOpacity: 0.3
+      };
+      highlightLayer = L.geoJSON(feature, { style: highlightStyle });
+      highlightLayer.addTo(map);
+    }
+
+    // 圃場GeoJSONを書き出す
+    document.getElementById('outbtn').addEventListener('click', function() {
+      const geojson = polygonLayerGroup.toGeoJSON();
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson, null, 2));
+      const dlAnchor = document.createElement('a');
+      dlAnchor.setAttribute("href", dataStr);
+      dlAnchor.setAttribute("download", "fields_export.geojson");
+      document.body.appendChild(dlAnchor);
+      dlAnchor.click();
+      document.body.removeChild(dlAnchor);
+    });
+  </script>
+</body>
+</html>
