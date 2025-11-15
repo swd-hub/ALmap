@@ -8,8 +8,26 @@
     body { display: flex; margin: 0; }
     #map { width: 70%; height: 100vh; }
     #info { width: 30%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
-    table { border-collapse: collapse; width: 100%; }
-    td { border: 1px solid #ccc; padding: 4px; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;   /* ← 列幅を固定レイアウトに */
+}
+
+td, th {
+  border: 1px solid #ccc;
+  padding: 4px;
+  word-wrap: break-word; /* 長い文字列を折り返す */
+}
+
+th:first-child, td:first-child {
+  width: 50%;   /* 地番列 */
+}
+
+th:last-child, td:last-child {
+  width: 50%;   /* 面積列 */
+}
+
     .tiban-label {
       background: rgba(255,255,255,0.85);
       padding: 2px 8px;
@@ -94,12 +112,39 @@
   cursor: ew-resize;
   background: rgba(0,0,0,0.05);
 }
+/* 表題のスタイル（見やすく、下に配置） */
+.info-title {
+  display: block;
+  margin: 0 0 8px 0;           /* ← 上の余白をゼロにして詰める */
+  font-size: 18px;
+  font-weight: bold;
+  color: #1565c0;
+  border-bottom: 2px solid #ccc;
+  padding-bottom: 4px;
+}
 
-  </style>
+/* 左パネルの中身全体を下に下げる */
+#infoContent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;                   /* ← 要素間の余白を統一的に確保 */
+  padding: 60px 12px 12px 12px;/* ← 上から60px下げる */
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* 左パネル自体が前面に出るように */
+.info-panel {
+  z-index: 1000;
+}
+
+</style>
 </head>
-
 <body>
   <div id="map"></div>
+
+  <!-- 右側の固定情報パネル -->
   <div id="info">
     <h3>選択した情報</h3>
     <div id="details">GeoJSONファイルを選択し、圃場をクリックしてください</div>
@@ -108,30 +153,34 @@
     <hr>
     <div id="legend"></div>
     <button id="outbtn">表示中の圃場をGeoJSONで保存</button>
-  </div>
-  
-<div id="infoPanel" class="info-panel">
-  <div id="infoToggle" class="toggle-btn">≡</div>
-  <div id="infoContent">
-    <!-- 詳細表示（ピンの属性など） -->
-    <div id="propertyDetails"></div>
-    <!-- 面積表 -->
-    <div id="selectedTable"></div>
-    <!-- リセットボタン -->
-    <button id="resetSelectionBtn">選択をリセット</button>
-  </div>
-  <div id="infoResizer"></div>
-</div>
 
+
+  <!-- 左側のスライドパネル（詳細情報専用） -->
+  <div id="infoPanel" class="info-panel">
+    <div id="infoToggle" class="toggle-btn">≡</div>
+    <div id="infoContent">
+      <h3 class="info-title">詳細情報</h3>
+      <div id="propertyDetails"></div>
+    </div>
+    <div id="infoResizer"></div>
+  </div>
+</body>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
 
-  function updateSelectedTable(features) {
+let selectedFeatures = [];
+
+function updateSelectedTable(features) {
   const tableContainer = document.getElementById("selectedTable");
-  tableContainer.innerHTML = ""; // 前の表を消す
+  tableContainer.innerHTML = "";
+
+  if (features.length === 0) {
+    tableContainer.innerHTML = "<p>選択中の圃場はありません</p>";
+    return;
+  }
 
   let html = "<table><tr><th>地番</th><th>面積</th></tr>";
   let total = 0;
@@ -149,10 +198,6 @@
   tableContainer.innerHTML = html;
 }
 
-document.getElementById("resetSelectionBtn").addEventListener("click", function() {
-  selectedFeatures = [];
-  updateSelectedTable(selectedFeatures);
-});
 
 
   
@@ -205,9 +250,6 @@ function showProperties(props, feature) {
   // ✅ 面積表を更新
   updateSelectedTable(selectedFeatures);
 }
-
-
-
 
     // 作物カラーパレット定義
     const cropColors = {
@@ -309,7 +351,7 @@ function showProperties(props, feature) {
 
     // マップ初期化（デフォルトは OSM）
     const map = L.map("map", {
-      center: [35.404, 132.825], zoom: 16, layers: [osm]
+      center: [35.404, 132.825], zoom: 17, layers: [osm]
     });
 
     // レイヤグループ
@@ -327,7 +369,7 @@ function showProperties(props, feature) {
     L.control.layers(baseMaps, overlayMaps).addTo(map);
 
     // 選択されたポリゴン一覧
-    let selectedFeatures = [];
+   //すでに let selectedFeatures = [];
     const originalPolygonStyles = new WeakMap();
 
 // ファイル読み込み処理
@@ -483,10 +525,6 @@ function showProperties(props) {
   document.getElementById("propertyDetails").innerHTML = html;
 }
 
-
-
-
-
 // 複数選択フィーチャ用: 地番・面積と合計（属性 AreaOnRegistry を使用）
 function showSelectedFeatureProperties() {
   if (selectedFeatures.length === 0) {
@@ -525,8 +563,6 @@ function showSelectedFeatureProperties() {
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
   document.getElementById("details").innerHTML = html; // ✅ 右パネルに表示
 }
-
-
 
     // 強調枠（選択状態を分かりやすくしたい場合用）
     function selectPolygonStyle(lyr) {
