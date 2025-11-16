@@ -139,7 +139,7 @@
   <!-- 右側の固定情報パネル -->
   <div id="info">
     <h3>情報</h3>
-    <div id="details">GeoJSONファイルを選択し、ピンとレイア（境界線）を読み込んでください</div>
+    <div id="details">GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください</div>
     <hr>
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
     <hr>
@@ -517,7 +517,7 @@ function showProperties(props) {
 function showSelectedFeatureProperties() {
   if (selectedFeatures.length === 0) {
     document.getElementById("details").innerHTML =
-      "GeoJSONファイルを選択し、ピンとレイア（境界線）を読み込んでください";
+      "GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください";
     return;
   } else if (selectedFeatures.length === 1) {
     // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
