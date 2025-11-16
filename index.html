@@ -6,28 +6,24 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { display: flex; margin: 0; }
-    #map { width: 70%; height: 100vh; }
-    #info { width: 30%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
-table {
-  border-collapse: collapse;
-  width: 100%;
-  table-layout: fixed;   /* ← 列幅を固定レイアウトに */
-}
-
-td, th {
-  border: 1px solid #ccc;
-  padding: 4px;
-  word-wrap: break-word; /* 長い文字列を折り返す */
-}
-
-th:first-child, td:first-child {
-  width: 50%;   /* 地番列 */
-}
-
-th:last-child, td:last-child {
-  width: 50%;   /* 面積列 */
-}
-
+    #map { width: 80%; height: 100vh; }
+    #info { width: 20%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
+	table {
+	  border-collapse: collapse;
+	  width: 100%;
+	  table-layout: fixed;   /* ← 列幅を固定レイアウトに */
+	}
+	td, th {
+	  border: 1px solid #ccc;
+	  padding: 4px;
+	  word-wrap: break-word; /* 長い文字列を折り返す */
+	}
+	th:first-child, td:first-child {
+	  width: 50%;   /* 地番列 */
+	}
+	th:last-child, td:last-child {
+	  width: 50%;   /* 面積列 */
+	}
     .tiban-label {
       background: rgba(255,255,255,0.85);
       padding: 2px 8px;
@@ -78,67 +74,63 @@ th:last-child, td:last-child {
     .info-panel.open {
       left: 0; /* スライドイン */
     }
-.toggle-btn {
-  position: fixed;         /* ← 画面に固定 */
-  top: 10px;
-  left: 10px;              /* ← 画面左上に表示 */
-  width: 40px;
-  height: 40px;
-  background: #1565c0;
-  color: #fff;
-  text-align: center;
-  line-height: 40px;
-  cursor: pointer;
-  border-radius: 5px;
-  font-size: 20px;
-  z-index: 2000;           /* ← 地図やUIより前面に出す */
-}
-.leaflet-control-zoom {
-  top: 100px !important;   /* ← 位置を下にずらす */
-  left: 10px !important;
-}
-
+	.toggle-btn {
+	  position: fixed;         /* ← 画面に固定 */
+	  top: 10px;
+	  left: 10px;              /* ← 画面左上に表示 */
+	  width: 40px;
+	  height: 40px;
+	  background: #1565c0;
+	  color: #fff;
+	  text-align: center;
+	  line-height: 40px;
+	  cursor: pointer;
+	  border-radius: 5px;
+	  font-size: 20px;
+	  z-index: 2000;           /* ← 地図やUIより前面に出す */
+	}
+	.leaflet-control-zoom {
+	  top: 100px !important;   /* ← 位置を下にずらす */
+	  left: 10px !important;
+	}
     /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
     .leaflet-control-layers {
       margin-top: 10px;
       margin-right: 10px;
     }
-  #infoResizer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 6px;
-  height: 100%;
-  cursor: ew-resize;
-  background: rgba(0,0,0,0.05);
-}
-/* 表題のスタイル（見やすく、下に配置） */
-.info-title {
-  display: block;
-  margin: 0 0 8px 0;           /* ← 上の余白をゼロにして詰める */
-  font-size: 18px;
-  font-weight: bold;
-  color: #1565c0;
-  border-bottom: 2px solid #ccc;
-  padding-bottom: 4px;
-}
-
-/* 左パネルの中身全体を下に下げる */
-#infoContent {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;                   /* ← 要素間の余白を統一的に確保 */
-  padding: 60px 12px 12px 12px;/* ← 上から60px下げる */
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-/* 左パネル自体が前面に出るように */
-.info-panel {
-  z-index: 1000;
-}
-
+		  #infoResizer {
+		  position: absolute;
+		  top: 0;
+		  right: 0;
+		  width: 6px;
+		  height: 100%;
+		  cursor: ew-resize;
+		  background: rgba(0,0,0,0.05);
+		}
+	/* 表題のスタイル（見やすく、下に配置） */
+	.info-title {
+	  display: block;
+	  margin: 0 0 8px 0;           /* ← 上の余白をゼロにして詰める */
+	  font-size: 18px;
+	  font-weight: bold;
+	  color: #1565c0;
+	  border-bottom: 2px solid #ccc;
+	  padding-bottom: 4px;
+	}
+	/* 左パネルの中身全体を下に下げる */
+	#infoContent {
+	  display: flex;
+	  flex-direction: column;
+	  gap: 16px;                   /* ← 要素間の余白を統一的に確保 */
+	  padding: 60px 12px 12px 12px;/* ← 上から60px下げる */
+	  overflow-y: auto;
+	  height: 100%;
+	  box-sizing: border-box;
+	}
+	/* 左パネル自体が前面に出るように */
+	.info-panel {
+	  z-index: 1000;
+	}
 </style>
 </head>
 <body>
@@ -152,8 +144,7 @@ th:last-child, td:last-child {
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
     <hr>
     <div id="legend"></div>
-    <button id="outbtn">表示中の圃場をGeoJSONで保存</button>
-
+    <button id="outbtn">表示中の圃場の作物区分をGeoJSONで保存</button>
 
   <!-- 左側のスライドパネル（詳細情報専用） -->
   <div id="infoPanel" class="info-panel">
@@ -292,7 +283,7 @@ function showProperties(props, feature) {
 /*------------------------------------------------------
   プロパティ表示
 ------------------------------------------------------*/
- // 英→日ラベル辞書（FarmCommitteeCd追加）
+ // 英→日ラベル辞書
     const propertyLabels = {
       // 主項目・参考画像・日本語訳対応
       Address:        "所在地",
@@ -349,7 +340,7 @@ function showProperties(props, feature) {
       }
     );
 
-    // マップ初期化（デフォルトは OSM）
+    // マップ初期化（デフォルトは OSM） //OpenStreetMap
     const map = L.map("map", {
       center: [35.404, 132.825], zoom: 17, layers: [osm]
     });
@@ -369,7 +360,7 @@ function showProperties(props, feature) {
     L.control.layers(baseMaps, overlayMaps).addTo(map);
 
     // 選択されたポリゴン一覧
-   //すでに let selectedFeatures = [];
+   //すでに定義 let selectedFeatures = [];
     const originalPolygonStyles = new WeakMap();
 
 // ファイル読み込み処理
@@ -476,16 +467,15 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
 
               // 左情報欄に表示
               const props = feature.properties;
-              let html = "<table>";
-              for (const key in props) {
-                const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-                html += `<tr>
-                  <td>${jp}</td>
-                  <td>${props[key]}</td>
-                </tr>`;
-              }
-              html += "</table>";
-              document.getElementById("infoContent").innerHTML = html;
+				let html = "<h3 class='info-title'>詳細情報</h3><table>";
+				for (const key in props) {
+				  const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+				  html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
+				}
+				html += "</table>";
+
+				document.getElementById("infoContent").innerHTML = html;
+
 
               // 左パネルを自動で開く
               document.getElementById("infoPanel").classList.add("open");
@@ -532,12 +522,9 @@ function showSelectedFeatureProperties() {
       "GeoJSONファイルを選択し、圃場をクリックしてください";
     return;
   } else if (selectedFeatures.length === 1) {
-    console.log("1件選択:", selectedFeatures[0]);
     // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
     return;
   }
-
-  console.log("選択されたフィーチャ一覧:", selectedFeatures);
 
   let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択ピン数: ${selectedFeatures.length}</div>`;
   let totalArea = 0;
@@ -547,18 +534,15 @@ function showSelectedFeatureProperties() {
     const feature = item.feature;
     const props = feature?.properties || {};
     let area = 0;
-
     if (feature.geometry.type === "Point" && props.Tiban) {
       area = parseFloat(props.AreaOnRegistry) || 0;
       totalArea += area;
-
       html += `<tr>
         <td>${props.Tiban}</td>
         <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
       </tr>`;
     }
   });
-
   html += "</table>";
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
   document.getElementById("details").innerHTML = html; // ✅ 右パネルに表示
