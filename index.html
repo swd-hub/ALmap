@@ -138,13 +138,13 @@
 
   <!-- 右側の固定情報パネル -->
   <div id="info">
-    <h3>選択した情報</h3>
-    <div id="details">GeoJSONファイルを選択し、圃場をクリックしてください</div>
+    <h3>情報</h3>
+    <div id="details">GeoJSONファイルを選択し、ピンとレイア（境界線）を読み込んでください</div>
     <hr>
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
     <hr>
     <div id="legend"></div>
-    <button id="outbtn">表示中の圃場の作物区分をGeoJSONで保存</button>
+    <button id="outbtn">圃場の栽培作物をGeoJSONファイルで保存</button>
 
   <!-- 左側のスライドパネル（詳細情報専用） -->
   <div id="infoPanel" class="info-panel">
@@ -188,8 +188,6 @@ function updateSelectedTable(features) {
 
   tableContainer.innerHTML = html;
 }
-
-
 
   
 // DOMが読み込まれてから実行
@@ -263,7 +261,7 @@ function showProperties(props, feature) {
     // UI：作物選択ラジオ
     function createCropLegend(crops) {
       const legendDiv = document.getElementById("legend");
-      let html = "<h4>作物（ラジオ選択して圃場着色）</h4>";
+      let html = "<h4>作物（ラジオ選択して圃場をクリック）</h4>";
       crops.forEach((crop, i) => {
         html += `<label>
           <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
@@ -519,7 +517,7 @@ function showProperties(props) {
 function showSelectedFeatureProperties() {
   if (selectedFeatures.length === 0) {
     document.getElementById("details").innerHTML =
-      "GeoJSONファイルを選択し、圃場をクリックしてください";
+      "GeoJSONファイルを選択し、ピンとレイア（境界線）を読み込んでください";
     return;
   } else if (selectedFeatures.length === 1) {
     // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
@@ -566,17 +564,33 @@ function showSelectedFeatureProperties() {
       });
     }
 
-    // 圃場GeoJSONを書き出す
-    document.getElementById('outbtn').addEventListener('click', function() {
-      const geojson = polygonLayerGroup.toGeoJSON();
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson, null, 2));
-      const dlAnchor = document.createElement('a');
-      dlAnchor.setAttribute("href", dataStr);
-      dlAnchor.setAttribute("download", "fields_export.geojson");
-      document.body.appendChild(dlAnchor);
-      dlAnchor.click();
-      document.body.removeChild(dlAnchor);
-    });
+// 圃場GeoJSONを書き出す（保存時刻をファイル名に付与）
+document.getElementById('outbtn').addEventListener('click', function() {
+  const geojson = polygonLayerGroup.toGeoJSON();
+
+  // 現在時刻を取得
+  const now = new Date();
+  const timestamp =
+    now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    String(now.getDate()).padStart(2, "0") +
+    String(now.getHours()).padStart(2, "0") +
+    String(now.getMinutes()).padStart(2, "0");
+
+  // ファイル名を組み立て
+  const filename = `ALmapData${timestamp}.geojson`;
+
+  // Blobを作成してダウンロード
+  const dataStr = "data:text/json;charset=utf-8," +
+    encodeURIComponent(JSON.stringify(geojson, null, 2));
+  const dlAnchor = document.createElement('a');
+  dlAnchor.setAttribute("href", dataStr);
+  dlAnchor.setAttribute("download", filename);
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  document.body.removeChild(dlAnchor);
+});
+
     
   </script>
 </body>
