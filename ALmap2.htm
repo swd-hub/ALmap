@@ -6,28 +6,24 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { display: flex; margin: 0; }
-    #map { width: 70%; height: 100vh; }
-    #info { width: 30%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
-table {
-  border-collapse: collapse;
-  width: 100%;
-  table-layout: fixed;   /* ← 列幅を固定レイアウトに */
-}
-
-td, th {
-  border: 1px solid #ccc;
-  padding: 4px;
-  word-wrap: break-word; /* 長い文字列を折り返す */
-}
-
-th:first-child, td:first-child {
-  width: 50%;   /* 地番列 */
-}
-
-th:last-child, td:last-child {
-  width: 50%;   /* 面積列 */
-}
-
+    #map { width: 80%; height: 100vh; }
+    #info { width: 20%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
+	table {
+	  border-collapse: collapse;
+	  width: 100%;
+	  table-layout: fixed;   /* ← 列幅を固定レイアウトに */
+	}
+	td, th {
+	  border: 1px solid #ccc;
+	  padding: 4px;
+	  word-wrap: break-word; /* 長い文字列を折り返す */
+	}
+	th:first-child, td:first-child {
+	  width: 50%;   /* 地番列 */
+	}
+	th:last-child, td:last-child {
+	  width: 50%;   /* 面積列 */
+	}
     .tiban-label {
       background: rgba(255,255,255,0.85);
       padding: 2px 8px;
@@ -78,67 +74,63 @@ th:last-child, td:last-child {
     .info-panel.open {
       left: 0; /* スライドイン */
     }
-.toggle-btn {
-  position: fixed;         /* ← 画面に固定 */
-  top: 10px;
-  left: 10px;              /* ← 画面左上に表示 */
-  width: 40px;
-  height: 40px;
-  background: #1565c0;
-  color: #fff;
-  text-align: center;
-  line-height: 40px;
-  cursor: pointer;
-  border-radius: 5px;
-  font-size: 20px;
-  z-index: 2000;           /* ← 地図やUIより前面に出す */
-}
-.leaflet-control-zoom {
-  top: 100px !important;   /* ← 位置を下にずらす */
-  left: 10px !important;
-}
-
+	.toggle-btn {
+	  position: fixed;         /* ← 画面に固定 */
+	  top: 10px;
+	  left: 10px;              /* ← 画面左上に表示 */
+	  width: 40px;
+	  height: 40px;
+	  background: #1565c0;
+	  color: #fff;
+	  text-align: center;
+	  line-height: 40px;
+	  cursor: pointer;
+	  border-radius: 5px;
+	  font-size: 20px;
+	  z-index: 2000;           /* ← 地図やUIより前面に出す */
+	}
+	.leaflet-control-zoom {
+	  top: 100px !important;   /* ← 位置を下にずらす */
+	  left: 10px !important;
+	}
     /* Leaflet のレイヤー切替コントロールが info パネルに隠れないように調整 */
     .leaflet-control-layers {
       margin-top: 10px;
       margin-right: 10px;
     }
-  #infoResizer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 6px;
-  height: 100%;
-  cursor: ew-resize;
-  background: rgba(0,0,0,0.05);
-}
-/* 表題のスタイル（見やすく、下に配置） */
-.info-title {
-  display: block;
-  margin: 0 0 8px 0;           /* ← 上の余白をゼロにして詰める */
-  font-size: 18px;
-  font-weight: bold;
-  color: #1565c0;
-  border-bottom: 2px solid #ccc;
-  padding-bottom: 4px;
-}
-
-/* 左パネルの中身全体を下に下げる */
-#infoContent {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;                   /* ← 要素間の余白を統一的に確保 */
-  padding: 60px 12px 12px 12px;/* ← 上から60px下げる */
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-/* 左パネル自体が前面に出るように */
-.info-panel {
-  z-index: 1000;
-}
-
+		  #infoResizer {
+		  position: absolute;
+		  top: 0;
+		  right: 0;
+		  width: 6px;
+		  height: 100%;
+		  cursor: ew-resize;
+		  background: rgba(0,0,0,0.05);
+		}
+	/* 表題のスタイル（見やすく、下に配置） */
+	.info-title {
+	  display: block;
+	  margin: 0 0 8px 0;           /* ← 上の余白をゼロにして詰める */
+	  font-size: 18px;
+	  font-weight: bold;
+	  color: #1565c0;
+	  border-bottom: 2px solid #ccc;
+	  padding-bottom: 4px;
+	}
+	/* 左パネルの中身全体を下に下げる */
+	#infoContent {
+	  display: flex;
+	  flex-direction: column;
+	  gap: 16px;                   /* ← 要素間の余白を統一的に確保 */
+	  padding: 60px 12px 12px 12px;/* ← 上から60px下げる */
+	  overflow-y: auto;
+	  height: 100%;
+	  box-sizing: border-box;
+	}
+	/* 左パネル自体が前面に出るように */
+	.info-panel {
+	  z-index: 1000;
+	}
 </style>
 </head>
 <body>
@@ -146,14 +138,13 @@ th:last-child, td:last-child {
 
   <!-- 右側の固定情報パネル -->
   <div id="info">
-    <h3>選択した情報</h3>
-    <div id="details">GeoJSONファイルを選択し、圃場をクリックしてください</div>
+    <h3>情報</h3>
+    <div id="details">GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください</div>
     <hr>
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
     <hr>
     <div id="legend"></div>
-    <button id="outbtn">表示中の圃場をGeoJSONで保存</button>
-
+    <button id="outbtn">圃場の栽培作物をGeoJSONファイルで保存</button>
 
   <!-- 左側のスライドパネル（詳細情報専用） -->
   <div id="infoPanel" class="info-panel">
@@ -166,10 +157,14 @@ th:last-child, td:last-child {
   </div>
 </body>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<!-- Leaflet + leaflet.pattern + turf.js の読み込み -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.pattern/dist/leaflet.pattern.min.js"></script>
 
-  <script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+<script>
 
 let selectedFeatures = [];
 
@@ -197,8 +192,6 @@ function updateSelectedTable(features) {
 
   tableContainer.innerHTML = html;
 }
-
-
 
   
 // DOMが読み込まれてから実行
@@ -251,126 +244,118 @@ function showProperties(props, feature) {
   updateSelectedTable(selectedFeatures);
 }
 
-    // 作物カラーパレット定義
-    const cropColors = {
-      "主食用きぬむすめ": "#e57373",
-      "主食用こしひかり": "#f06292",
-      "稲WCS用きぬむすめ": "#ba68c8",
-      "稲WCS用つきはやか": "#64b5f6",
-      "飼料用米": "#4dd0e1",
-      "大麦": "#4db6ac",
-      "小麦": "#81c784",
-      "ブロッコリー": "#dce775",
-      "タマネギ": "#ffd54f",
-      "デントコーン": "#ffb74d",
-      "はとむぎ": "#a1887f",
-      "さつまいも": "#f4511e",
-      "大豆": "#789262",
-      "その他": "#bdbdbd"
-    };
-
-    // UI：作物選択ラジオ
-    function createCropLegend(crops) {
-      const legendDiv = document.getElementById("legend");
-      let html = "<h4>作物（ラジオ選択して圃場着色）</h4>";
-      crops.forEach((crop, i) => {
-        html += `<label>
-          <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
-          <span style="background:${cropColors[crop]};"></span>
-          ${crop}
-        </label><br>`;
-      });
-      legendDiv.innerHTML = html;
-    }
-    createCropLegend(Object.keys(cropColors));
-
-    function getSelectedCrop() {
-      const checked = document.querySelector('input[name="crop"]:checked');
-      return checked ? checked.value : null;
-    }
-
-/*------------------------------------------------------
-  プロパティ表示
-------------------------------------------------------*/
- // 英→日ラベル辞書（FarmCommitteeCd追加）
-    const propertyLabels = {
-      // 主項目・参考画像・日本語訳対応
-      Address:        "所在地",
-      Tiban:          "地番",
-      ClassificationOfLandCodeName: "地目",
-      AreaOnRegistry: "面積（㎡）",
-      SectionOfNoushinhouCodeName: "農振法区分",
-      SectionOfToshikeikakuhouCodeName: "都市計画区分",
-      OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
-      FarmerIndicationNumberHash: "耕作管理番号",
-      KindOfRightCodeName:      "権利種別",
-      KindOfRight:              "権利の種類",
-      CommencementDate:         "存続期間の開始日",
-      EndStagesDate:            "存続期間の終了日",
-      RightSettingContentsCodeName: "農地中間管理権等権利設定の内容",
-      UsageSituationInvestigationResultCodeName: "遊休農地関係（利用状況調査等）",
-      UsageSituationInvestigationDate:   "利用状況調査日",
-      UseIntentionInvestigationDate:     "利用意向調査日",
-      OwnerStatementIntentSurveyResultsCodeName: "遊休農地関係（利用意向調査等）",
-      UseIntentionAscertainmentResultCodeName:   "遊休農地関係（周辺地域への支障の除去等の指導）",
-      ActionOrderDate:        "指導命令日",
-      MayorPublicAnnouncementDate: "市町村長が措置を行う旨の公示を行った日",
-      FarmCommitteeName:      "農業委員会名",
-      FarmCommitteeCd:        "農業委員会コード",
-      PublicNoticeDate:       "公告日",
-      SectionOfPolygon:        "筆区分",
-      SectionOfPolygonCodeName:"筆区分名",
-      DaichoId:               "台帳ID",
-      polygon_uuid:           "ポリゴンUUID",
-      daicho_shubetsu_cd:     "台帳種別コード",
-      SectionOfNoushinhou:    "農振法区分コード",
-      SectionOfToshikeikakuhou:"都市計画法区分コード",
-      AreaOnRegistryHa: "面積（ヘクタール）",
-      ClassificationOfLand:   "地目コード",
-      SectionOfPolygonName:   "筆区分名",
-      UsageSituationInvestigationResult: "利用状況調査結果コード",
-      OwnerStatementIntentSurveyResults: "所有者等の廃地の状況",
-      UseIntentionAscertainmentResult: "利用意向把握結果コード",
-      RecommendationContenDate: "勧告内容日",
-      RightOfMiddleManagement: "農地中間管理権の状況",
-      OazaCode: "大字コード",
-      TodofukenCode: "都道府県コード",
-      ShikuchosonCode: "市区町村コード"
-    };
 
 
-    // --- ベースレイヤー定義 ---
-    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, attribution: "© OpenStreetMap"
-    });
-    const esriSat = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-        attribution: "Tiles © Esri"
+// --- ベースレイヤー定義 ---
+const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "© OpenStreetMap"
+});
+const esriSat = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles © Esri"
+  }
+);
+
+// ① マップ初期化
+const map = L.map("map", {
+  center: [35.404, 132.825],
+  zoom: 17,
+  layers: [osm]
+});
+
+// ② StripePattern を GeoJSON より前に宣言
+// ② StripePattern を GeoJSON より前に宣言
+const stripePattern = new L.StripePattern({
+  weight: 2,
+  spaceWeight: 4,
+  color: '#ffffff',
+  opacity: 0.5,
+  angle: 45
+});
+stripePattern.addTo(map);
+
+
+
+
+// ✅ 作物カラーパレット定義
+const cropColors = {
+  "主食用きぬむすめ": "#90ee90",
+  "主食用つや姫": "#ffc0cb",
+  "主食用つきあかり": "#add8e6",
+  "主食用コシヒカリ": "#6a5acd",
+  "稲WCS用きぬむすめ": "#006400",
+  "稲WCS用つきはやか": "#9acd32",
+  "稲WCS用たちすずか": "#d2b48c",
+  "稲WCS用ヒメノモチ": "#ffb6c1",
+  "飼料用米": "#dda0dd",
+  "大麦": "#ffcc99",
+  "小麦": "#ff8c00",
+  "ブロッコリー": "#228b22",
+  "タマネギ": "#deb887",
+  "デントコーン": "#ffff00",
+  "はとむぎ": "#654321",
+  "さつまいも": "#800080",
+  "大豆": "#f4a300",
+  "その他": "#bdbdbd"
+};
+
+// GeoJSONデータ例
+const polygonData = {
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "crop": "主食用きぬむすめ" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[135.0,35.0],[135.01,35.0],[135.01,35.01],[135.0,35.01],[135.0,35.0]]]
       }
-    );
+    },
+    {
+      "type": "Feature",
+      "properties": { "crop": "稲WCS用きぬむすめ" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[135.02,35.0],[135.03,35.0],[135.03,35.01],[135.02,35.01],[135.02,35.0]]]
+      }
+    }
+  ]
+};
 
-    // マップ初期化（デフォルトは OSM）
-    const map = L.map("map", {
-      center: [35.404, 132.825], zoom: 17, layers: [osm]
-    });
+// ③ GeoJSON描画（stripePattern を参照できる）
+L.geoJSON(polygonData, {
+  style: function(feature) {
+    if (feature.properties.crop === "稲WCS用きぬむすめ") {
+      return {
+        fillPattern: stripePattern,
+        color: "#006400",
+        weight: 1
+      };
+    } else {
+      return {
+        fillColor: cropColors[feature.properties.crop],
+        color: "#000",
+        weight: 1,
+        fillOpacity: 0.6
+      };
+    }
+  }
+}).addTo(map);
 
-    // レイヤグループ
-    const polygonLayerGroup = L.layerGroup().addTo(map);
-    const markerLayerGroup  = L.layerGroup().addTo(map);
-    const tibanLayerGroup   = L.layerGroup().addTo(map);
+// レイヤグループ
+const polygonLayerGroup = L.layerGroup().addTo(map);
+const markerLayerGroup  = L.layerGroup().addTo(map);
+const tibanLayerGroup   = L.layerGroup().addTo(map);
 
-    // ベースレイヤーとオーバーレイをまとめてコントロールに追加
-    const baseMaps = { "地図": osm, "衛星画像": esriSat };
-    const overlayMaps = {
-      "筆ポリゴン": polygonLayerGroup,
-      "農地ピン": markerLayerGroup,
-      "地番ラベル": tibanLayerGroup
-    };
-    L.control.layers(baseMaps, overlayMaps).addTo(map);
-
-    // 選択されたポリゴン一覧
-   //すでに let selectedFeatures = [];
-    const originalPolygonStyles = new WeakMap();
+// ベースレイヤーとオーバーレイをまとめてコントロールに追加
+const baseMaps = { "地図": osm, "衛星画像": esriSat };
+const overlayMaps = {
+  "筆ポリゴン": polygonLayerGroup,
+  "農地ピン": markerLayerGroup,
+  "地番ラベル": tibanLayerGroup
+};
+L.control.layers(baseMaps, overlayMaps).addTo(map);
 
 // ファイル読み込み処理
 document.getElementById("fileInput").addEventListener("change", function(event) {
@@ -476,16 +461,15 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
 
               // 左情報欄に表示
               const props = feature.properties;
-              let html = "<table>";
-              for (const key in props) {
-                const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
-                html += `<tr>
-                  <td>${jp}</td>
-                  <td>${props[key]}</td>
-                </tr>`;
-              }
-              html += "</table>";
-              document.getElementById("infoContent").innerHTML = html;
+				let html = "<h3 class='info-title'>詳細情報</h3><table>";
+				for (const key in props) {
+				  const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
+				  html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
+				}
+				html += "</table>";
+
+				document.getElementById("infoContent").innerHTML = html;
+
 
               // 左パネルを自動で開く
               document.getElementById("infoPanel").classList.add("open");
@@ -529,15 +513,12 @@ function showProperties(props) {
 function showSelectedFeatureProperties() {
   if (selectedFeatures.length === 0) {
     document.getElementById("details").innerHTML =
-      "GeoJSONファイルを選択し、圃場をクリックしてください";
+      "GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください";
     return;
   } else if (selectedFeatures.length === 1) {
-    console.log("1件選択:", selectedFeatures[0]);
     // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
     return;
   }
-
-  console.log("選択されたフィーチャ一覧:", selectedFeatures);
 
   let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択ピン数: ${selectedFeatures.length}</div>`;
   let totalArea = 0;
@@ -547,18 +528,15 @@ function showSelectedFeatureProperties() {
     const feature = item.feature;
     const props = feature?.properties || {};
     let area = 0;
-
     if (feature.geometry.type === "Point" && props.Tiban) {
       area = parseFloat(props.AreaOnRegistry) || 0;
       totalArea += area;
-
       html += `<tr>
         <td>${props.Tiban}</td>
         <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
       </tr>`;
     }
   });
-
   html += "</table>";
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
   document.getElementById("details").innerHTML = html; // ✅ 右パネルに表示
@@ -582,17 +560,33 @@ function showSelectedFeatureProperties() {
       });
     }
 
-    // 圃場GeoJSONを書き出す
-    document.getElementById('outbtn').addEventListener('click', function() {
-      const geojson = polygonLayerGroup.toGeoJSON();
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson, null, 2));
-      const dlAnchor = document.createElement('a');
-      dlAnchor.setAttribute("href", dataStr);
-      dlAnchor.setAttribute("download", "fields_export.geojson");
-      document.body.appendChild(dlAnchor);
-      dlAnchor.click();
-      document.body.removeChild(dlAnchor);
-    });
+// 圃場GeoJSONを書き出す（保存時刻をファイル名に付与）
+document.getElementById('outbtn').addEventListener('click', function() {
+  const geojson = polygonLayerGroup.toGeoJSON();
+
+  // 現在時刻を取得
+  const now = new Date();
+  const timestamp =
+    now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, "0") +
+    String(now.getDate()).padStart(2, "0") +
+    String(now.getHours()).padStart(2, "0") +
+    String(now.getMinutes()).padStart(2, "0");
+
+  // ファイル名を組み立て
+  const filename = `ALmapData${timestamp}.geojson`;
+
+  // Blobを作成してダウンロード
+  const dataStr = "data:text/json;charset=utf-8," +
+    encodeURIComponent(JSON.stringify(geojson, null, 2));
+  const dlAnchor = document.createElement('a');
+  dlAnchor.setAttribute("href", dataStr);
+  dlAnchor.setAttribute("download", filename);
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  document.body.removeChild(dlAnchor);
+});
+
     
   </script>
 </body>
