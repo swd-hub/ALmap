@@ -283,49 +283,63 @@ function showProperties(props, feature) {
 ------------------------------------------------------*/
  // 英→日ラベル辞書
     const propertyLabels = {
-      // 主項目・参考画像・日本語訳対応
-      Address:        "所在地",
-      Tiban:          "地番",
-      ClassificationOfLandCodeName: "地目",
-      AreaOnRegistry: "面積（㎡）",
-      SectionOfNoushinhouCodeName: "農振法区分",
-      SectionOfToshikeikakuhouCodeName: "都市計画区分",
-      OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
-      FarmerIndicationNumberHash: "耕作管理番号",
-      KindOfRightCodeName:      "権利種別",
-      KindOfRight:              "権利の種類",
-      CommencementDate:         "存続期間の開始日",
-      EndStagesDate:            "存続期間の終了日",
-      RightSettingContentsCodeName: "農地中間管理権等権利設定の内容",
-      UsageSituationInvestigationResultCodeName: "遊休農地関係（利用状況調査等）",
-      UsageSituationInvestigationDate:   "利用状況調査日",
-      UseIntentionInvestigationDate:     "利用意向調査日",
-      OwnerStatementIntentSurveyResultsCodeName: "遊休農地関係（利用意向調査等）",
-      UseIntentionAscertainmentResultCodeName:   "遊休農地関係（周辺地域への支障の除去等の指導）",
-      ActionOrderDate:        "指導命令日",
-      MayorPublicAnnouncementDate: "市町村長が措置を行う旨の公示を行った日",
-      FarmCommitteeName:      "農業委員会名",
-      FarmCommitteeCd:        "農業委員会コード",
-      PublicNoticeDate:       "公告日",
-      SectionOfPolygon:        "筆区分",
-      SectionOfPolygonCodeName:"筆区分名",
-      DaichoId:               "台帳ID",
-      polygon_uuid:           "ポリゴンUUID",
-      daicho_shubetsu_cd:     "台帳種別コード",
-      SectionOfNoushinhou:    "農振法区分コード",
-      SectionOfToshikeikakuhou:"都市計画法区分コード",
-      AreaOnRegistryHa: "面積（ヘクタール）",
-      ClassificationOfLand:   "地目コード",
-      SectionOfPolygonName:   "筆区分名",
-      UsageSituationInvestigationResult: "利用状況調査結果コード",
-      OwnerStatementIntentSurveyResults: "所有者等の廃地の状況",
-      UseIntentionAscertainmentResult: "利用意向把握結果コード",
-      RecommendationContenDate: "勧告内容日",
-      RightOfMiddleManagement: "農地中間管理権の状況",
-      OazaCode: "大字コード",
-      TodofukenCode: "都道府県コード",
-      ShikuchosonCode: "市区町村コード"
-    };
+  FarmCommitteeCd: "農業委員会コード",
+  FarmCommitteeName: "農業委員会名",
+  TodofukenCode: "都道府県コード",
+  ShikuchosonCode: "市町村コード",
+  OazaCode: "大字コード",
+
+  ClassificationOfLandCodeName: "地目",
+  ClassificationOfLand: "地目コード",
+
+  AreaOnRegistry: "面積（㎡）",
+
+  SectionOfNoushinhouCodeName: "農振法区分",
+  SectionOfNoushinhou: "農振法区分コード",
+
+  SectionOfToshikeikakuhouCodeName: "都市計画法区分",
+  SectionOfToshikeikakuhou: "都市計画法区分コード",
+
+  OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
+  OwnerFarmIntention: "所有者の農地に関する意向コード",
+
+  FarmerIndicationNumberHash: "耕作者整理番号",
+
+  KindOfRightCodeName: "権利の種類",
+  KindOfRight: "権利の種類コード",
+
+  CommencementDate: "存続期間（始期）",
+  EndStagesDate: "存続期間（終期）",
+
+  RightSettingContentsCodeName: "農地中間管理権の状況",
+  RightSettingContents: "農地中間管理権コード",
+
+  UsageSituationInvestigationDate: "利用状況調査日",
+  UsageSituationInvestigationResultCodeName: "遊休農地かどうか",
+  UsageSituationInvestigationResult: "遊休農地コード",
+
+  UseIntentionInvestigationDate: "利用意向調査日",
+  OwnerStatementIntentSurveyResultsCodeName: "遊休農地の所有者等の意向",
+  OwnerStatementIntentSurveyResults: "遊休農地の所有者等の意向コード",
+
+  UseIntentionAscertainmentResultCodeName: "所有者等の確知の状況",
+  UseIntentionAscertainmentResult: "所有者等の確知コード",
+
+  PublicNoticeDate: "公告日",
+  RightOfMiddleManagement: "農地中間管理権裁定日",
+  RecommendationContenDate: "勧告日",
+  ActionOrderDate: "措置命令日",
+  MayorPublicAnnouncementDate: "市町村長公示日",
+
+  Address: "所在地・地番",
+  Tiban: "地番",
+
+  SectionOfPolygonCodeName: "ポリゴン区分",
+  SectionOfPolygon: "ポリゴン区分コード",
+
+  DaichoId: "台帳ID",
+  daicho_shubetsu_cd: "台帳種別コード"
+};
 
 
     // --- ベースレイヤー定義 ---
