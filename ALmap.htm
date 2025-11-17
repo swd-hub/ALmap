@@ -6,8 +6,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { display: flex; margin: 0; }
-    #map { width: 80%; height: 100vh; }
-    #info { width: 20%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
+    #map { width: 85%; height: 100vh; }
+    #info { width: 15%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; }
 	table {
 	  border-collapse: collapse;
 	  width: 100%;
@@ -47,6 +47,18 @@
       margin-right:4px;
       vertical-align:middle;
       border:1px solid #333;
+    }
+    /* 凡例の網掛けスタイル (CSSグラデーションでシミュレート) */
+    .legend-hatch {
+      /* background-colorの上にbackground-imageが重なるように設定 */
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0,0,0,0.3) 0px, /* 線を少し濃く */
+        rgba(0,0,0,0.3) 2px, /* 線幅を2pxに */
+        transparent 2px,     /* 線間の透明部分の開始も2pxから */
+        transparent 14px     /* パターン全体のサイズに合わせて調整 */
+      );
+      background-size: 14px 14px; /* 網掛けの密度とサイズを調整 */
     }
     #outbtn {
       margin: 8px 0;
@@ -131,6 +143,45 @@
 	.info-panel {
 	  z-index: 1000;
 	}
+    /* 読み込み済みファイル名表示用 */
+    #loadedFileNamesDisplay {
+        margin-top: 5px;
+        font-size: 0.9em;
+        color: #555;
+        max-height: 150px; /* 高さを制限 */
+        overflow-y: auto;  /* スクロール可能に */
+        border: 1px solid #eee;
+        padding: 5px;
+        background-color: #f9f9f9;
+        border-radius: 3px;
+    }
+    #loadedFileNamesDisplay ul {
+        margin: 0;
+        padding-left: 20px;
+    }
+    #loadedFileNamesDisplay li {
+        margin-bottom: 2px;
+        word-break: break-all; /* 長いファイル名が途中で改行されるように */
+    }
+    /* クリアボタンのスタイル */
+    #clearSelectedFeaturesBtn {
+        margin-top: 5px;
+        padding: 5px 10px;
+        background-color: #f44336; /* 赤色 */
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.9em;
+        width: 100%; /* 親要素に合わせる */
+    }
+    #clearSelectedFeaturesBtn:hover {
+        background-color: #d32f2f; /* 濃い赤 */
+    }
+    /* ポリゴンに常に人差し指カーソルを表示 */
+    #map .leaflet-interactive {
+      cursor: pointer !important;
+    }
 </style>
 </head>
 <body>
@@ -140,11 +191,13 @@
   <div id="info">
     <h3>情報</h3>
     <div id="details">GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください</div>
+    <button id="clearSelectedFeaturesBtn">選択をクリア</button>
     <hr>
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
+    <div id="loadedFileNamesDisplay"></div>
     <hr>
     <div id="legend"></div>
-    <button id="outbtn">圃場の栽培作物をGeoJSONファイルで保存</button>
+    <button id="outbtn">作物をGeoJSONファイルで保存</button>
 
   <!-- 左側のスライドパネル（詳細情報専用） -->
   <div id="infoPanel" class="info-panel">
@@ -163,36 +216,12 @@
   <script>
 
 let selectedFeatures = [];
+let loadedFileNames = [];
 
-function updateSelectedTable(features) {
-  const tableContainer = document.getElementById("selectedTable");
-  tableContainer.innerHTML = "";
-
-  if (features.length === 0) {
-    tableContainer.innerHTML = "<p>選択中の圃場はありません</p>";
-    return;
-  }
-
-  let html = "<table><tr><th>地番</th><th>面積</th></tr>";
-  let total = 0;
-
-  for (const f of features) {
-    const props = f.feature.properties;
-    html += `<tr><td>${props.Tiban}</td><td>${props.Area} m²</td></tr>`;
-    total += props.Area;
-  }
-
-  html += "</table>";
-  html += `<p>選択ピン数: ${features.length}</p>`;
-  html += `<p>合計面積: ${total} m² (${(total / 10000).toFixed(4)} ha)</p>`;
-
-  tableContainer.innerHTML = html;
-}
-
-  
-// DOMが読み込まれてから実行
 document.addEventListener("DOMContentLoaded", function() {
-  // トグルボタン制御
+  // マップのダブルクリックズームを無効化
+  map.doubleClickZoom.disable();
+
   document.getElementById("infoToggle").addEventListener("click", function() {
     document.getElementById("infoPanel").classList.toggle("open");
   });
@@ -202,29 +231,46 @@ document.addEventListener("DOMContentLoaded", function() {
 
   let isResizing = false;
 
-  // リサイズバーをドラッグ開始
   resizer.addEventListener("mousedown", function(e) {
     isResizing = true;
     document.body.style.cursor = "ew-resize";
   });
 
-  // ドラッグ中に幅を変更
   document.addEventListener("mousemove", function(e) {
     if (!isResizing) return;
-    const newWidth = Math.min(Math.max(e.clientX, 200), 600); // 最小200px 最大600px
+    const newWidth = Math.min(Math.max(e.clientX, 200), 600);
     panel.style.width = newWidth + "px";
   });
 
-  // ドラッグ終了
   document.addEventListener("mouseup", function() {
     isResizing = false;
     document.body.style.cursor = "default";
   });
+
+  updateLoadedFileNamesDisplay();
+
+  document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
+    selectedFeatures.forEach(item => {
+      if (item.lyr.feature.geometry.type === "Polygon" || item.lyr.feature.geometry.type === "MultiPolygon") {
+        item.lyr.feature.properties.SelectedCrop = null;
+        restorePolygonStyle(item.lyr);
+      }
+    });
+    selectedFeatures = [];
+    showSelectedFeatureProperties();
+    document.getElementById("propertyDetails").innerHTML = "";
+  });
+
+  map.on('overlayadd', function(e) {
+    if (e.layer === polygonLayerGroup) {
+      polygonLayerGroup.eachLayer(function(lyr) {
+        restorePolygonStyle(lyr);
+      });
+    }
+  });
 });
 
-// ピンをクリックしたときに左パネルを開いて情報表示
 function showProperties(props, feature) {
-  // 詳細表示（左パネル上部）
   let html = "<table>";
   for (const key in props) {
     const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
@@ -232,21 +278,16 @@ function showProperties(props, feature) {
   }
   html += "</table>";
   document.getElementById("propertyDetails").innerHTML = html;
-  // ✅ 左パネルを開く
   document.getElementById("infoPanel").classList.add("open");
-  // ✅ 選択ピンに追加（重複チェックなし）
-  selectedFeatures.push({ feature });
-  // ✅ 面積表を更新
-  updateSelectedTable(selectedFeatures);
 }
 
-// 作物カラーパレット定義
+// --- ユーザー修正版のcropColorsを反映 ---
 const cropColors = {
   "主食用きぬむすめ": "#90ee90", // 明るい緑
   "主食用つや姫": "#ffc0cb", // ピンク
   "主食用つきあかり": "#add8e6", // 水色
   "主食用コシヒカリ": "#6a5acd", // 青紫
-  "稲WCS用きぬむすめ": "#006400", // 深緑
+  "稲WCS用きぬむすめ": "#90ee90", // 明るい緑
   "稲WCS用つきはやか": "#9acd32", // 黄緑
   "稲WCS用たちすずか": "#d2b48c", // ベージュ
   "稲WCS用ヒメノモチ": "#ffb6c1", // 薄ピンク
@@ -255,99 +296,180 @@ const cropColors = {
   "小麦": "#ff8c00", // 濃いオレンジ
   "ブロッコリー": "#228b22", // 森の緑
   "タマネギ": "#deb887", // 木肌色
-  "デントコーン": "#ffff00", // 黄色
+  "飼料用トウモロコシ": "#ffff00", // 黄色
   "はとむぎ": "#654321", // こげ茶
   "さつまいも": "#800080", // 紫
   "大豆": "#f4a300", // オレンジ
   "その他": "#bdbdbd", // 灰色
 };
 
+function isHatchedCrop(cropName) {
+  return cropName && (cropName.includes("飼料用") || cropName.includes("WCS用"));
+}
 
-    // UI：作物選択ラジオ
-    function createCropLegend(crops) {
-      const legendDiv = document.getElementById("legend");
-      let html = "<h4>作物（ラジオ選択して圃場をクリック）</h4>";
-      crops.forEach((crop, i) => {
-        html += `<label>
-          <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
-          <span style="background:${cropColors[crop]};"></span>
-          ${crop}
-        </label><br>`;
-      });
-      legendDiv.innerHTML = html;
+function getBaseCropNameForHatching(cropName) {
+    // 1. 渡された作物名がWCS用で、かつ対応する「主食用」がcropColorsに定義されている場合
+    if (cropName && cropName.startsWith("稲WCS用")) {
+        const variety = cropName.replace("稲WCS用", ""); // 例: "きぬむすめ"
+        if (cropColors[`主食用${variety}`]) { // 例: "主食用きぬむすめ"
+            return `主食用${variety}`; // 「主食用」の名前をベース色名として返す
+        }
     }
+    // 2. 上記以外の場合（主食用、飼料用米、対応する主食用品種がないWCS用など）
+    //    元の作物名自体をベース色名として返す
+    return cropName;
+}
+
+function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
+  const renderer = mapInstance.getRenderer(mapInstance);
+  if (!renderer || !renderer._container) {
+    return;
+  }
+  const svg = renderer._container;
+
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.insertBefore(defs, svg.firstChild);
+  }
+
+  if (defs.querySelector(`#${patternId}`)) {
+    return;
+  }
+
+  const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+  pattern.setAttribute("id", patternId);
+  pattern.setAttribute("x", "0");
+  pattern.setAttribute("y", "0");
+  pattern.setAttribute("width", "10");
+  pattern.setAttribute("height", "10");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", "0");
+  rect.setAttribute("y", "0");
+  rect.setAttribute("width", "10");
+  rect.setAttribute("height", "10");
+  rect.setAttribute("fill", backgroundColor);
+  pattern.appendChild(rect);
+
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", "0");
+  line.setAttribute("y1", "0");
+  line.setAttribute("x2", "10");
+  line.setAttribute("y2", "10");
+  line.setAttribute("stroke", "#000");
+  line.setAttribute("stroke-width", "1");
+  line.setAttribute("stroke-opacity", "0.5");
+  pattern.appendChild(line);
+
+  defs.appendChild(pattern);
+}
+
+function getPolygonRenderStyle(cropName, isSelected = false) {
+  let currentFill;
+  let currentFillOpacity = "0.7";
+  let currentStroke = "#d00";
+  let currentStrokeWidth = "2";
+
+  if (isSelected) {
+    currentStroke = "#0057ff";
+    currentStrokeWidth = "4";
+  }
+
+  // 作物が未設定の場合はfillを"transparent"に、fill-opacityも0に
+  if (cropName === null || cropName === undefined) {
+      currentFill = "transparent"; // 塗りつぶしを完全に透明にする
+      currentFillOpacity = "0.0"; // オパシティも0にする
+  } else if (isHatchedCrop(cropName)) {
+    const baseCropName = getBaseCropNameForHatching(cropName);
+    const hatchBackgroundColor = cropColors[baseCropName] || cropColors["その他"] || "#e88";
+    const uniqueHatchPatternId = `hatch-pattern-${baseCropName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+    injectSvgHatchPattern(map, uniqueHatchPatternId, hatchBackgroundColor);
+    currentFill = `url(#${uniqueHatchPatternId})`;
+  } else {
+    // べた塗りの場合
+    currentFill = cropColors[cropName] || cropColors["その他"] || "#e88";
+  }
+
+  return {
+    fill: currentFill,
+    fillOpacity: currentFillOpacity,
+    stroke: currentStroke,
+    strokeWidth: currentStrokeWidth
+  };
+}
+
+function createCropLegend(crops) {
+  const legendDiv = document.getElementById("legend");
+  let html = "<h4>作物（ラジオ選択して圃場をクリック）</h4>";
+  crops.forEach((crop, i) => {
+    const hatchClass = isHatchedCrop(crop) ? "legend-hatch" : "";
+    const baseCropName = getBaseCropNameForHatching(crop);
+    const legendColor = cropColors[baseCropName] || cropColors["その他"] || "#e88";
+    html += `<label>
+      <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
+      <span class="${hatchClass}" style="background-color:${legendColor};"></span>
+      ${crop}
+    </label><br>`;
+  });
+  legendDiv.innerHTML = html;
+}
+
+document.addEventListener("DOMContentLoaded", function() {
     createCropLegend(Object.keys(cropColors));
+});
 
-    function getSelectedCrop() {
-      const checked = document.querySelector('input[name="crop"]:checked');
-      return checked ? checked.value : null;
-    }
+function getSelectedCrop() {
+  const checked = document.querySelector('input[name="crop"]:checked');
+  return checked ? checked.value : null;
+}
 
-/*------------------------------------------------------
-  プロパティ表示
-------------------------------------------------------*/
- // 英→日ラベル辞書
-    const propertyLabels = {
+const propertyLabels = {
   FarmCommitteeCd: "農業委員会コード",
   FarmCommitteeName: "農業委員会名",
   TodofukenCode: "都道府県コード",
   ShikuchosonCode: "市町村コード",
   OazaCode: "大字コード",
-
   ClassificationOfLandCodeName: "地目",
   ClassificationOfLand: "地目コード",
-
-  AreaOnRegistry: "面積（㎡）",
-
+  AreaOnRegistry: "登記簿面積（㎡）",
   SectionOfNoushinhouCodeName: "農振法区分",
   SectionOfNoushinhou: "農振法区分コード",
-
   SectionOfToshikeikakuhouCodeName: "都市計画法区分",
   SectionOfToshikeikakuhou: "都市計画法区分コード",
-
   OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
   OwnerFarmIntention: "所有者の農地に関する意向コード",
-
   FarmerIndicationNumberHash: "耕作者整理番号",
-
   KindOfRightCodeName: "権利の種類",
   KindOfRight: "権利の種類コード",
-
   CommencementDate: "存続期間（始期）",
   EndStagesDate: "存続期間（終期）",
-
   RightSettingContentsCodeName: "農地中間管理権の状況",
   RightSettingContents: "農地中間管理権コード",
-
   UsageSituationInvestigationDate: "利用状況調査日",
   UsageSituationInvestigationResultCodeName: "遊休農地かどうか",
   UsageSituationInvestigationResult: "遊休農地コード",
-
   UseIntentionInvestigationDate: "利用意向調査日",
   OwnerStatementIntentSurveyResultsCodeName: "遊休農地の所有者等の意向",
   OwnerStatementIntentSurveyResults: "遊休農地の所有者等の意向コード",
-
   UseIntentionAscertainmentResultCodeName: "所有者等の確知の状況",
   UseIntentionAscertainmentResult: "所有者等の確知コード",
-
   PublicNoticeDate: "公告日",
   RightOfMiddleManagement: "農地中間管理権裁定日",
   RecommendationContenDate: "勧告日",
   ActionOrderDate: "措置命令日",
   MayorPublicAnnouncementDate: "市町村長公示日",
-
   Address: "所在地・地番",
   Tiban: "地番",
-
   SectionOfPolygonCodeName: "ポリゴン区分",
   SectionOfPolygon: "ポリゴン区分コード",
-
   DaichoId: "台帳ID",
   daicho_shubetsu_cd: "台帳種別コード"
 };
 
 
-    // --- ベースレイヤー定義 ---
     const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: "© OpenStreetMap"
     });
@@ -357,17 +479,14 @@ const cropColors = {
       }
     );
 
-    // マップ初期化（デフォルトは OSM） //OpenStreetMap
     const map = L.map("map", {
       center: [35.404, 132.825], zoom: 17, layers: [osm]
     });
 
-    // レイヤグループ
     const polygonLayerGroup = L.layerGroup().addTo(map);
     const markerLayerGroup  = L.layerGroup().addTo(map);
     const tibanLayerGroup   = L.layerGroup().addTo(map);
 
-    // ベースレイヤーとオーバーレイをまとめてコントロールに追加
     const baseMaps = { "地図": osm, "衛星画像": esriSat };
     const overlayMaps = {
       "筆ポリゴン": polygonLayerGroup,
@@ -376,46 +495,73 @@ const cropColors = {
     };
     L.control.layers(baseMaps, overlayMaps).addTo(map);
 
-    // 選択されたポリゴン一覧
-   //すでに定義 let selectedFeatures = [];
     const originalPolygonStyles = new WeakMap();
 
-// ファイル読み込み処理
 document.getElementById("fileInput").addEventListener("change", function(event) {
   const files = event.target.files;
-  for (const file of files) {
+  if (files.length === 0) {
+      updateLoadedFileNamesDisplay();
+      return;
+  }
+
+  let filesToProcessCount = 0;
+  const totalFilesSelected = files.length;
+
+  Array.from(files).forEach(file => {
     const reader = new FileReader();
     reader.onload = function(e) {
       let geojson;
       try {
         geojson = JSON.parse(e.target.result);
-      } catch {
-        alert("ファイルの読み込みに失敗: " + file.name);
+      } catch (error) {
+        alert(`ファイルの読み込みに失敗: ${file.name} - ${error.message}`);
+        filesToProcessCount++;
+        if (filesToProcessCount === totalFilesSelected) {
+            updateLoadedFileNamesDisplay();
+        }
         return;
       }
+
       L.geoJSON(geojson, {
-        style: function(feature) {
-          if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
-            const crop = feature.properties?.SelectedCrop;
-            return {
-              color: "#d00",
-              weight: 2,
-              fillColor: cropColors[crop] || "#e88",
-              fillOpacity: crop && cropColors[crop] ? 0.7 : 0.3
-            };
-          }
-        },
         onEachFeature: function(feature, lyr) {
           if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
             polygonLayerGroup.addLayer(lyr);
-            originalPolygonStyles.set(lyr, {
-              color: lyr.options.color,
-              weight: lyr.options.weight,
-              fillColor: lyr.options.fillColor,
-              fillOpacity: lyr.options.fillOpacity
-            });
 
-            // 地番ラベル
+            const initialCrop = feature.properties?.SelectedCrop;
+            const initialStyle = getPolygonRenderStyle(initialCrop, false);
+
+            if (lyr._path) {
+                lyr._path.setAttribute('fill', initialStyle.fill);
+                lyr._path.setAttribute('fill-opacity', initialStyle.fillOpacity);
+                lyr._path.setAttribute('stroke', initialStyle.stroke);
+                lyr._path.setAttribute('stroke-width', initialStyle.strokeWidth);
+
+                originalPolygonStyles.set(lyr, {
+                    fill: initialStyle.fill,
+                    fillOpacity: initialStyle.fillOpacity,
+                    stroke: initialStyle.stroke,
+                    strokeWidth: initialStyle.strokeWidth,
+                    cropName: initialCrop
+                });
+            } else { // Canvasレンダラーなどのフォールバック
+                const baseCropName = getBaseCropNameForHatching(initialCrop);
+                const fillColorForCanvas = (initialStyle.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
+                lyr.setStyle({
+                    color: initialStyle.stroke,
+                    weight: initialStyle.strokeWidth,
+                    fillColor: fillColorForCanvas,
+                    fillOpacity: parseFloat(initialStyle.fillOpacity)
+                });
+                originalPolygonStyles.set(lyr, {
+                    color: lyr.options.color,
+                    weight: lyr.options.weight,
+                    fillColor: lyr.options.fillColor,
+                    fillOpacity: lyr.options.fillOpacity,
+                    cropName: initialCrop
+                });
+            }
+
+
             let coords;
             if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
               coords = feature.geometry.coordinates[0][0];
@@ -434,27 +580,41 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               tibanLayerGroup.addLayer(tibanLabel);
             }
 
-            // 圃場クリック時にトグル動作（面積はカウントせず着色のみ）
             lyr.on("click", function(e) {
+              // --- 修正箇所: イベント伝播の停止を再導入 ---
+              L.DomEvent.stopPropagation(e);
+              // --- 修正箇所ここまで ---
+
               const crop = getSelectedCrop();
               const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
+
               if (idx >= 0) {
-                restorePolygonStyle(lyr);
+                feature.properties.SelectedCrop = null; // 作物情報を解除
+                restorePolygonStyle(lyr); // 解除状態のスタイルを適用
                 selectedFeatures.splice(idx, 1);
               } else {
-                if (crop && cropColors[crop]) {
-                  lyr.setStyle({
-                    fillColor: cropColors[crop],
-                    fillOpacity: 0.7,
-                    color: "#111",
-                    weight: 3
-                  });
+                if (crop) {
                   feature.properties.SelectedCrop = crop;
+                  const selectedStyle = getPolygonRenderStyle(crop, true);
+
+                  if (lyr._path) {
+                    lyr._path.setAttribute('fill', selectedStyle.fill);
+                    lyr._path.setAttribute('fill-opacity', selectedStyle.fillOpacity);
+                    lyr._path.setAttribute('stroke', selectedStyle.stroke);
+                    lyr._path.setAttribute('stroke-width', selectedStyle.strokeWidth);
+                  } else {
+                     const baseCropName = getBaseCropNameForHatching(crop);
+                     const fillColorForCanvas = (selectedStyle.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
+                     lyr.setStyle({
+                       color: selectedStyle.stroke,
+                       weight: selectedStyle.strokeWidth,
+                       fillColor: fillColorForCanvas,
+                       fillOpacity: parseFloat(selectedStyle.fillOpacity)
+                     });
+                  }
                 }
-                selectPolygonStyle(lyr);
                 selectedFeatures.push({ lyr, feature });
               }
-              showSelectedFeatureProperties();
             });
 
           } else if (feature.geometry.type === "Point") {
@@ -470,11 +630,14 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               })
             });
 
-            marker.feature = feature; // ✅ featureを保持
+            marker.feature = feature;
             markerLayerGroup.addLayer(marker);
 
-            // ✅ ピンをクリックしたときの処理
-            marker.on("click", function() {
+            marker.on("click", function(e) {
+              // --- 修正箇所: イベント伝播の停止を再導入 ---
+              L.DomEvent.stopPropagation(e);
+              // --- 修正箇所ここまで ---
+              
               const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
               if (idx >= 0) {
                 selectedFeatures.splice(idx, 1);
@@ -482,7 +645,6 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                 selectedFeatures.push({ lyr: marker, feature });
               }
 
-              // 左情報欄に表示
               const props = feature.properties;
 				let html = "<h3 class='info-title'>詳細情報</h3><table>";
 				for (const key in props) {
@@ -491,13 +653,9 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
 				}
 				html += "</table>";
 
-				document.getElementById("infoContent").innerHTML = html;
+				document.getElementById("propertyDetails").innerHTML = html;
 
-
-              // 左パネルを自動で開く
               document.getElementById("infoPanel").classList.add("open");
-
-              // 複数選択時の合計面積は従来通り右側 details に表示
               showSelectedFeatureProperties();
             });
 
@@ -515,15 +673,48 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
           }
         }
       });
+
+      if (!loadedFileNames.includes(file.name)) {
+        loadedFileNames.push(file.name);
+      }
+
+      filesToProcessCount++;
+      if (filesToProcessCount === totalFilesSelected) {
+          updateLoadedFileNamesDisplay();
+      }
+    };
+    reader.onerror = function() {
+        alert(`ファイルの読み込み中にエラーが発生しました: ${file.name}`);
+        filesToProcessCount++;
+        if (filesToProcessCount === totalFilesSelected) {
+            updateLoadedFileNamesDisplay();
+        }
     };
     reader.readAsText(file);
-  }
+  });
 });
-// プロパティ表示関数
+
+function updateLoadedFileNamesDisplay() {
+  const displayElement = document.getElementById("loadedFileNamesDisplay");
+  if (!displayElement) return;
+
+  if (loadedFileNames.length === 0) {
+    displayElement.innerHTML = "<em>読み込まれたファイルはありません。</em>";
+    return;
+  }
+
+  let fileListHtml = `<div style="font-weight: bold;">読み込み済みファイル (${loadedFileNames.length}個):</div><ul>`;
+  loadedFileNames.forEach(name => {
+    fileListHtml += `<li>${name}</li>`;
+  });
+  fileListHtml += `</ul>`;
+  displayElement.innerHTML = fileListHtml;
+}
+
 function showProperties(props) {
   let html = "<table>";
-  for (const key of propertyOrder) {
-    if (props[key] !== undefined) {
+  for (const key in props) {
+    if (props.hasOwnProperty(key)) {
       const jp = propertyLabels[key] || "（訳なし）";
       html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
     }
@@ -532,62 +723,62 @@ function showProperties(props) {
   document.getElementById("propertyDetails").innerHTML = html;
 }
 
-// 複数選択フィーチャ用: 地番・面積と合計（属性 AreaOnRegistry を使用）
 function showSelectedFeatureProperties() {
-  if (selectedFeatures.length === 0) {
+  const selectedPins = selectedFeatures.filter(item => item.feature.geometry.type === "Point");
+
+  if (selectedPins.length === 0) {
     document.getElementById("details").innerHTML =
       "GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください";
     return;
-  } else if (selectedFeatures.length === 1) {
-    // ✅ 単一選択時は左パネルに詳細を表示するので右パネルは不要
-    return;
   }
 
-  let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択ピン数: ${selectedFeatures.length}</div>`;
+  let html = `<div style="color:#1565c0;font-weight:bold;margin-bottom:6px;">選択ピン数: ${selectedPins.length}</div>`;
   let totalArea = 0;
   html += "<table>";
+  html += "<thead><tr><th>地番</th><th>面積</th></tr></thead><tbody>"; 
 
-  selectedFeatures.forEach((item, index) => {
+  selectedPins.forEach((item, index) => {
     const feature = item.feature;
     const props = feature?.properties || {};
     let area = 0;
-    if (feature.geometry.type === "Point" && props.Tiban) {
-      area = parseFloat(props.AreaOnRegistry) || 0;
-      totalArea += area;
-      html += `<tr>
-        <td>${props.Tiban}</td>
-        <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
-      </tr>`;
-    }
+    area = parseFloat(props.AreaOnRegistry) || 0;
+    totalArea += area;
+    html += `<tr>
+      <td>${props.Tiban || 'N/A'}</td>
+      <td style="text-align:right;">${area.toLocaleString()} ㎡</td>
+    </tr>`;
   });
-  html += "</table>";
+  html += "</tbody></table>";
   html += `<div style="color:#1565c0;font-weight:bold;margin-top:10px;">合計面積: ${totalArea.toLocaleString()} ㎡ (${(totalArea / 10000).toFixed(4)} ha)</div>`;
-  document.getElementById("details").innerHTML = html; // ✅ 右パネルに表示
+  document.getElementById("details").innerHTML = html;
 }
 
-    // 強調枠（選択状態を分かりやすくしたい場合用）
-    function selectPolygonStyle(lyr) {
-      lyr.setStyle && lyr.setStyle({
-        color: "#0057ff",
-        weight: 4
-      });
-    }
-    
-    function restorePolygonStyle(lyr) {
-      const orig = originalPolygonStyles.get(lyr) || {};
-      lyr.setStyle && lyr.setStyle({
-        color: orig.color || "#d00",
-        weight: orig.weight || 2,
-        fillColor: orig.fillColor || "#e88",
-        fillOpacity: orig.fillOpacity || 0.3
-      });
-    }
+function restorePolygonStyle(lyr) {
+  const currentCrop = lyr.feature.properties?.SelectedCrop;
+  const styleToRestore = getPolygonRenderStyle(currentCrop, false);
 
-// 圃場GeoJSONを書き出す（保存時刻をファイル名に付与）
-document.getElementById('outbtn').addEventListener('click', function() {
+  if (lyr._path) {
+    lyr._path.setAttribute('fill', styleToRestore.fill);
+    lyr._path.setAttribute('fill-opacity', styleToRestore.fillOpacity);
+    lyr._path.setAttribute('stroke', styleToRestore.stroke);
+    lyr._path.setAttribute('stroke-width', styleToRestore.strokeWidth);
+  } else if (lyr.setStyle) {
+    const baseCropName = getBaseCropNameForHatching(currentCrop);
+    const fillColorForCanvas = (styleToRestore.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
+    lyr.setStyle({
+      color: styleToRestore.stroke,
+      weight: styleToRestore.strokeWidth,
+      fillColor: fillColorForCanvas,
+      fillOpacity: parseFloat(styleToRestore.fillOpacity)
+    });
+  }
+}
+
+// --- ファイル保存機能の修正: saveFilePickerとフォールバックの導入 ---
+document.getElementById('outbtn').addEventListener('click', async function() {
   const geojson = polygonLayerGroup.toGeoJSON();
+  const dataToSave = JSON.stringify(geojson, null, 2);
 
-  // 現在時刻を取得
   const now = new Date();
   const timestamp =
     now.getFullYear().toString() +
@@ -595,20 +786,45 @@ document.getElementById('outbtn').addEventListener('click', function() {
     String(now.getDate()).padStart(2, "0") +
     String(now.getHours()).padStart(2, "0") +
     String(now.getMinutes()).padStart(2, "0");
+  const defaultFilename = `ALmapData${timestamp}.geojson`;
 
-  // ファイル名を組み立て
-  const filename = `ALmapData${timestamp}.geojson`;
-
-  // Blobを作成してダウンロード
-  const dataStr = "data:text/json;charset=utf-8," +
-    encodeURIComponent(JSON.stringify(geojson, null, 2));
-  const dlAnchor = document.createElement('a');
-  dlAnchor.setAttribute("href", dataStr);
-  dlAnchor.setAttribute("download", filename);
-  document.body.appendChild(dlAnchor);
-  dlAnchor.click();
-  document.body.removeChild(dlAnchor);
+  if ('showSaveFilePicker' in window) {
+    // showSaveFilePickerがサポートされているブラウザ
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: defaultFilename,
+        types: [{
+          description: 'GeoJSON Files',
+          accept: { 'application/json': ['.geojson', '.json'] },
+        }],
+      });
+      const writableStream = await handle.createWritable();
+      await writableStream.write(new Blob([dataToSave], { type: 'application/json' }));
+      await writableStream.close();
+      alert('ファイルが保存されました。');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // ユーザーが保存をキャンセルした場合
+        console.log('ファイルの保存がキャンセルされました。');
+      } else {
+        console.error('ファイルの保存中にエラーが発生しました:', err);
+        alert('ファイルの保存中にエラーが発生しました。詳細はコンソールを確認してください。');
+      }
+    }
+  } else {
+    // showSaveFilePickerがサポートされていないブラウザ向けのフォールバック
+    const dataStr = "data:text/json;charset=utf-8," +
+      encodeURIComponent(dataToSave);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", defaultFilename);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    document.body.removeChild(dlAnchor);
+    alert('ファイルがダウンロードされました（ブラウザのダウンロード設定に従います）。');
+  }
 });
+// --- ファイル保存機能の修正ここまで ---
 
     
   </script>
