@@ -646,7 +646,8 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
               }
 
               const props = feature.properties;
-				let html = "<h3 class='info-title'>詳細情報</h3><table>";
+			//	let html = "<h3 class='info-title'>詳細情報</h3><table>";
+				let html = "<table>";				
 				for (const key in props) {
 				  const jp = propertyLabels[key] ? propertyLabels[key] : "（訳なし）";
 				  html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
