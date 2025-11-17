@@ -507,6 +507,18 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
 
   Array.from(files).forEach(file => {
     const reader = new FileReader();
+    
+ // ★★★ 同名ファイルのチェック（読み込み前） ★★★
+    if (loadedFileNames.includes(file.name)) {
+        alert(`同じ名前のファイル「${file.name}」は既に読み込まれています。`);
+        filesToProcessCount++;
+        if (filesToProcessCount === totalFilesSelected) {
+            updateLoadedFileNamesDisplay();
+        }
+        return; // ← FileReader を作らずに終了
+    }
+    // ★★★ ここまで ★★★
+    
     reader.onload = function(e) {
       let geojson;
       try {
