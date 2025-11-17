@@ -545,7 +545,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                 });
             } else { // Canvasレンダラーなどのフォールバック
                 const baseCropName = getBaseCropNameForHatching(initialCrop);
-                const fillColorForCanvas = (initialStyle.fill === "none") ? false : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
+                const fillColorForCanvas = (initialStyle.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
                 lyr.setStyle({
                     color: initialStyle.stroke,
                     weight: initialStyle.strokeWidth,
@@ -604,7 +604,7 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                     lyr._path.setAttribute('stroke-width', selectedStyle.strokeWidth);
                   } else {
                      const baseCropName = getBaseCropNameForHatching(crop);
-                     const fillColorForCanvas = (selectedStyle.fill === "none") ? false : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
+                     const fillColorForCanvas = (selectedStyle.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
                      lyr.setStyle({
                        color: selectedStyle.stroke,
                        weight: selectedStyle.strokeWidth,
@@ -774,8 +774,10 @@ function restorePolygonStyle(lyr) {
   }
 }
 
-document.getElementById('outbtn').addEventListener('click', function() {
+// --- ファイル保存機能の修正: saveFilePickerとフォールバックの導入 ---
+document.getElementById('outbtn').addEventListener('click', async function() {
   const geojson = polygonLayerGroup.toGeoJSON();
+  const dataToSave = JSON.stringify(geojson, null, 2);
 
   const now = new Date();
   const timestamp =
@@ -784,18 +786,45 @@ document.getElementById('outbtn').addEventListener('click', function() {
     String(now.getDate()).padStart(2, "0") +
     String(now.getHours()).padStart(2, "0") +
     String(now.getMinutes()).padStart(2, "0");
+  const defaultFilename = `ALmapData${timestamp}.geojson`;
 
-  const filename = `ALmapData${timestamp}.geojson`;
-
-  const dataStr = "data:text/json;charset=utf-8," +
-    encodeURIComponent(JSON.stringify(geojson, null, 2));
-  const dlAnchor = document.createElement('a');
-  dlAnchor.setAttribute("href", dataStr);
-  dlAnchor.setAttribute("download", filename);
-  document.body.appendChild(dlAnchor);
-  dlAnchor.click();
-  document.body.removeChild(dlAnchor);
+  if ('showSaveFilePicker' in window) {
+    // showSaveFilePickerがサポートされているブラウザ
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: defaultFilename,
+        types: [{
+          description: 'GeoJSON Files',
+          accept: { 'application/json': ['.geojson', '.json'] },
+        }],
+      });
+      const writableStream = await handle.createWritable();
+      await writableStream.write(new Blob([dataToSave], { type: 'application/json' }));
+      await writableStream.close();
+      alert('ファイルが保存されました。');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // ユーザーが保存をキャンセルした場合
+        console.log('ファイルの保存がキャンセルされました。');
+      } else {
+        console.error('ファイルの保存中にエラーが発生しました:', err);
+        alert('ファイルの保存中にエラーが発生しました。詳細はコンソールを確認してください。');
+      }
+    }
+  } else {
+    // showSaveFilePickerがサポートされていないブラウザ向けのフォールバック
+    const dataStr = "data:text/json;charset=utf-8," +
+      encodeURIComponent(dataToSave);
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", defaultFilename);
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    document.body.removeChild(dlAnchor);
+    alert('ファイルがダウンロードされました（ブラウザのダウンロード設定に従います）。');
+  }
 });
+// --- ファイル保存機能の修正ここまで ---
 
     
   </script>
