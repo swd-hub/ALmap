@@ -187,10 +187,10 @@
   <div id="info">
     <h3>情報</h3>
     <div id="details">GeoJSONファイルを選択し、農地ピンと筆ポリゴン（境界）を読み込んでください</div>
-    <button id="clearSelectedFeaturesBtn">ピン選択をクリア</button> <!-- 追加したボタン -->
+    <button id="clearSelectedFeaturesBtn">選択をクリア</button>
     <hr>
     <input type="file" id="fileInput" accept=".geojson,.json" multiple />
-    <div id="loadedFileNamesDisplay"></div> <!-- ここに読み込み済みファイル名を表示 -->
+    <div id="loadedFileNamesDisplay"></div>
     <hr>
     <div id="legend"></div>
     <button id="outbtn">作物をGeoJSONファイルで保存</button>
@@ -242,20 +242,29 @@ document.addEventListener("DOMContentLoaded", function() {
 
   updateLoadedFileNamesDisplay();
 
-  // --- 追加したボタンのイベントリスナー ---
   document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
-    // 選択された全フィーチャのスタイルをリセット
     selectedFeatures.forEach(item => {
       if (item.lyr.feature.geometry.type === "Polygon" || item.lyr.feature.geometry.type === "MultiPolygon") {
-        item.lyr.feature.properties.SelectedCrop = null; // 作物情報をクリア
+        item.lyr.feature.properties.SelectedCrop = null;
         restorePolygonStyle(item.lyr);
       }
-      // ピンには特別な視覚的選択状態がないため、ここでは何もしない
     });
-    selectedFeatures = []; // 選択配列をクリア
-    showSelectedFeatureProperties(); // 集計表をクリア
-    document.getElementById("propertyDetails").innerHTML = ""; // 左パネルの詳細情報もクリア
+    selectedFeatures = [];
+    showSelectedFeatureProperties();
+    document.getElementById("propertyDetails").innerHTML = "";
   });
+
+  // --- 修正箇所: overlayadd イベントリスナーを追加 ---
+  map.on('overlayadd', function(e) {
+    // 筆ポリゴンレイヤーグループが追加された場合のみ処理
+    if (e.layer === polygonLayerGroup) {
+      polygonLayerGroup.eachLayer(function(lyr) {
+        // 各ポリゴンのスタイルを元の状態に復元
+        restorePolygonStyle(lyr);
+      });
+    }
+  });
+  // --- 修正箇所ここまで ---
 });
 
 function showProperties(props, feature) {
@@ -270,24 +279,24 @@ function showProperties(props, feature) {
 }
 
 const cropColors = {
-  "主食用きぬむすめ": "#90ee90", // 明るい緑
-  "主食用つや姫": "#ffc0cb", // ピンク
-  "主食用つきあかり": "#add8e6", // 水色
-  "主食用コシヒカリ": "#6a5acd", // 青紫
-  "稲WCS用きぬむすめ": "#90ee90", // 主食用きぬむすめと同じ色をベースにする
-  "稲WCS用つきはやか": "#add8e6", // 主食用つきあかりと同じ色をベースにする (仮定)
-  "稲WCS用たちすずか": "#d2b48c", // ベージュ
-  "稲WCS用ヒメノモチ": "#ffb6c1", // 薄ピンク
-  "飼料用米": "#dda0dd", // 藤色
-  "大麦": "#ffcc99", // ピーチ色
-  "小麦": "#ff8c00", // 濃いオレンジ
-  "ブロッコリー": "#228b22", // 森の緑
-  "タマネギ": "#deb887", // 木肌色
-  "飼料用トウモロコシ": "#ffff00", // 黄色
-  "はとむぎ": "#654321", // こげ茶
-  "さつまいも": "#800080", // 紫
-  "大豆": "#f4a300", // オレンジ
-  "その他": "#bdbdbd", // 灰色
+  "主食用きぬむすめ": "#90ee90",
+  "主食用つや姫": "#ffc0cb",
+  "主食用つきあかり": "#add8e6",
+  "主食用コシヒカリ": "#6a5acd",
+  "稲WCS用きぬむすめ": "#90ee90",
+  "稲WCS用つきはやか": "#add8e6",
+  "稲WCS用たちすずか": "#d2b48c",
+  "稲WCS用ヒメノモチ": "#ffb6c1",
+  "飼料用米": "#dda0dd",
+  "大麦": "#ffcc99",
+  "小麦": "#ff8c00",
+  "ブロッコリー": "#228b22",
+  "タマネギ": "#deb887",
+  "飼料用トウモロコシ": "#ffff00",
+  "はとむぎ": "#654321",
+  "さつまいも": "#800080",
+  "大豆": "#f4a300",
+  "その他": "#bdbdbd",
 };
 
 function isHatchedCrop(cropName) {
