@@ -178,6 +178,10 @@
     #clearSelectedFeaturesBtn:hover {
         background-color: #d32f2f; /* 濃い赤 */
     }
+    /* ポリゴンに常に人差し指カーソルを表示 */
+    #map .leaflet-interactive {
+      cursor: pointer !important;
+    }
 </style>
 </head>
 <body>
@@ -215,6 +219,9 @@ let selectedFeatures = [];
 let loadedFileNames = [];
 
 document.addEventListener("DOMContentLoaded", function() {
+  // マップのダブルクリックズームを無効化
+  map.doubleClickZoom.disable();
+
   document.getElementById("infoToggle").addEventListener("click", function() {
     document.getElementById("infoPanel").classList.toggle("open");
   });
@@ -254,17 +261,13 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("propertyDetails").innerHTML = "";
   });
 
-  // --- 修正箇所: overlayadd イベントリスナーを追加 ---
   map.on('overlayadd', function(e) {
-    // 筆ポリゴンレイヤーグループが追加された場合のみ処理
     if (e.layer === polygonLayerGroup) {
       polygonLayerGroup.eachLayer(function(lyr) {
-        // 各ポリゴンのスタイルを元の状態に復元
         restorePolygonStyle(lyr);
       });
     }
   });
-  // --- 修正箇所ここまで ---
 });
 
 function showProperties(props, feature) {
@@ -278,25 +281,26 @@ function showProperties(props, feature) {
   document.getElementById("infoPanel").classList.add("open");
 }
 
+// --- ユーザー修正版のcropColorsを反映 ---
 const cropColors = {
-  "主食用きぬむすめ": "#90ee90",
-  "主食用つや姫": "#ffc0cb",
-  "主食用つきあかり": "#add8e6",
-  "主食用コシヒカリ": "#6a5acd",
-  "稲WCS用きぬむすめ": "#90ee90",
-  "稲WCS用つきはやか": "#add8e6",
-  "稲WCS用たちすずか": "#d2b48c",
-  "稲WCS用ヒメノモチ": "#ffb6c1",
-  "飼料用米": "#dda0dd",
-  "大麦": "#ffcc99",
-  "小麦": "#ff8c00",
-  "ブロッコリー": "#228b22",
-  "タマネギ": "#deb887",
-  "飼料用トウモロコシ": "#ffff00",
-  "はとむぎ": "#654321",
-  "さつまいも": "#800080",
-  "大豆": "#f4a300",
-  "その他": "#bdbdbd",
+  "主食用きぬむすめ": "#90ee90", // 明るい緑
+  "主食用つや姫": "#ffc0cb", // ピンク
+  "主食用つきあかり": "#add8e6", // 水色
+  "主食用コシヒカリ": "#6a5acd", // 青紫
+  "稲WCS用きぬむすめ": "#90ee90", // 明るい緑
+  "稲WCS用つきはやか": "#9acd32", // 黄緑
+  "稲WCS用たちすずか": "#d2b48c", // ベージュ
+  "稲WCS用ヒメノモチ": "#ffb6c1", // 薄ピンク
+  "飼料用米": "#dda0dd", // 藤色
+  "大麦": "#ffcc99", // ピーチ色
+  "小麦": "#ff8c00", // 濃いオレンジ
+  "ブロッコリー": "#228b22", // 森の緑
+  "タマネギ": "#deb887", // 木肌色
+  "飼料用トウモロコシ": "#ffff00", // 黄色
+  "はとむぎ": "#654321", // こげ茶
+  "さつまいも": "#800080", // 紫
+  "大豆": "#f4a300", // オレンジ
+  "その他": "#bdbdbd", // 灰色
 };
 
 function isHatchedCrop(cropName) {
@@ -304,15 +308,15 @@ function isHatchedCrop(cropName) {
 }
 
 function getBaseCropNameForHatching(cropName) {
+    // 1. 渡された作物名がWCS用で、かつ対応する「主食用」がcropColorsに定義されている場合
     if (cropName && cropName.startsWith("稲WCS用")) {
-        const variety = cropName.replace("稲WCS用", "");
-        if (cropColors[`主食用${variety}`]) {
-            return `主食用${variety}`;
-        }
-        if (cropColors[cropName]) {
-            return cropName;
+        const variety = cropName.replace("稲WCS用", ""); // 例: "きぬむすめ"
+        if (cropColors[`主食用${variety}`]) { // 例: "主食用きぬむすめ"
+            return `主食用${variety}`; // 「主食用」の名前をベース色名として返す
         }
     }
+    // 2. 上記以外の場合（主食用、飼料用米、対応する主食用品種がないWCS用など）
+    //    元の作物名自体をベース色名として返す
     return cropName;
 }
 
@@ -364,17 +368,20 @@ function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
 
 function getPolygonRenderStyle(cropName, isSelected = false) {
   let currentFill;
-  let currentFillOpacity = (cropName !== null && cropName !== undefined) ? "0.7" : "0.5";
+  let currentFillOpacity = "0.7";
   let currentStroke = "#d00";
   let currentStrokeWidth = "2";
 
   if (isSelected) {
     currentStroke = "#0057ff";
     currentStrokeWidth = "4";
-    currentFillOpacity = "0.7";
   }
 
-  if (isHatchedCrop(cropName)) {
+  // 作物が未設定の場合はfillを"transparent"に、fill-opacityも0に
+  if (cropName === null || cropName === undefined) {
+      currentFill = "transparent"; // 塗りつぶしを完全に透明にする
+      currentFillOpacity = "0.0"; // オパシティも0にする
+  } else if (isHatchedCrop(cropName)) {
     const baseCropName = getBaseCropNameForHatching(cropName);
     const hatchBackgroundColor = cropColors[baseCropName] || cropColors["その他"] || "#e88";
     const uniqueHatchPatternId = `hatch-pattern-${baseCropName.replace(/[^a-zA-Z0-9]/g, '-')}`;
@@ -382,6 +389,7 @@ function getPolygonRenderStyle(cropName, isSelected = false) {
     injectSvgHatchPattern(map, uniqueHatchPatternId, hatchBackgroundColor);
     currentFill = `url(#${uniqueHatchPatternId})`;
   } else {
+    // べた塗りの場合
     currentFill = cropColors[cropName] || cropColors["その他"] || "#e88";
   }
 
@@ -535,13 +543,13 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                     strokeWidth: initialStyle.strokeWidth,
                     cropName: initialCrop
                 });
-            } else {
+            } else { // Canvasレンダラーなどのフォールバック
                 const baseCropName = getBaseCropNameForHatching(initialCrop);
-                const initialFillColor = cropColors[baseCropName] || cropColors["その他"] || "#e88";
+                const fillColorForCanvas = (initialStyle.fill === "none") ? false : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
                 lyr.setStyle({
                     color: initialStyle.stroke,
                     weight: initialStyle.strokeWidth,
-                    fillColor: initialFillColor,
+                    fillColor: fillColorForCanvas,
                     fillOpacity: parseFloat(initialStyle.fillOpacity)
                 });
                 originalPolygonStyles.set(lyr, {
@@ -573,12 +581,16 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
             }
 
             lyr.on("click", function(e) {
+              // --- 修正箇所: イベント伝播の停止を再導入 ---
+              L.DomEvent.stopPropagation(e);
+              // --- 修正箇所ここまで ---
+
               const crop = getSelectedCrop();
               const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
 
               if (idx >= 0) {
-                feature.properties.SelectedCrop = null;
-                restorePolygonStyle(lyr);
+                feature.properties.SelectedCrop = null; // 作物情報を解除
+                restorePolygonStyle(lyr); // 解除状態のスタイルを適用
                 selectedFeatures.splice(idx, 1);
               } else {
                 if (crop) {
@@ -592,10 +604,11 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
                     lyr._path.setAttribute('stroke-width', selectedStyle.strokeWidth);
                   } else {
                      const baseCropName = getBaseCropNameForHatching(crop);
+                     const fillColorForCanvas = (selectedStyle.fill === "none") ? false : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
                      lyr.setStyle({
                        color: selectedStyle.stroke,
                        weight: selectedStyle.strokeWidth,
-                       fillColor: cropColors[baseCropName] || cropColors["その他"] || "#e88",
+                       fillColor: fillColorForCanvas,
                        fillOpacity: parseFloat(selectedStyle.fillOpacity)
                      });
                   }
@@ -620,7 +633,11 @@ document.getElementById("fileInput").addEventListener("change", function(event) 
             marker.feature = feature;
             markerLayerGroup.addLayer(marker);
 
-            marker.on("click", function() {
+            marker.on("click", function(e) {
+              // --- 修正箇所: イベント伝播の停止を再導入 ---
+              L.DomEvent.stopPropagation(e);
+              // --- 修正箇所ここまで ---
+              
               const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
               if (idx >= 0) {
                 selectedFeatures.splice(idx, 1);
@@ -747,10 +764,11 @@ function restorePolygonStyle(lyr) {
     lyr._path.setAttribute('stroke-width', styleToRestore.strokeWidth);
   } else if (lyr.setStyle) {
     const baseCropName = getBaseCropNameForHatching(currentCrop);
+    const fillColorForCanvas = (styleToRestore.fill === "transparent") ? "transparent" : (cropColors[baseCropName] || cropColors["その他"] || "#e88");
     lyr.setStyle({
       color: styleToRestore.stroke,
       weight: styleToRestore.strokeWidth,
-      fillColor: cropColors[baseCropName] || cropColors["その他"] || "#e88",
+      fillColor: fillColorForCanvas,
       fillOpacity: parseFloat(styleToRestore.fillOpacity)
     });
   }
@@ -783,4 +801,3 @@ document.getElementById('outbtn').addEventListener('click', function() {
   </script>
 </body>
 </html>
-
