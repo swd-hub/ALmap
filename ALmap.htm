@@ -252,8 +252,6 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
     selectedFeatures.forEach(item => {
       if (item.lyr.feature.geometry.type === "Polygon" || item.lyr.feature.geometry.type === "MultiPolygon") {
-        item.lyr.feature.properties.SelectedCrop = null;
-        restorePolygonStyle(item.lyr);
       }
     });
     selectedFeatures = [];
