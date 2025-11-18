@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON &harr; CSV 相互変換ツール</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .section {
+            flex: 1;
+            min-width: 400px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        h2 {
+            color: #007bff;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        input[type="file"] {
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            width: calc(100% - 18px); /* Adjust for padding and border */
+            box-sizing: border-box;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-top: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:active {
+            background-color: #004085;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .message {
+            color: red;
+            margin-top: 10px;
+            min-height: 1.2em; /* Ensure space even if no message */
+        }
+        .note {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <h1>GeoJSON &harr; CSV 相互変換ツール</h1>
+
+    <div class="container">
+        <div class="section">
+            <h2>GeoJSON → CSV</h2>
+            <p>GeoJSONファイルを読み込み、CSV形式に変換します。</p>
+            <p class="note">ジオメトリは `geometry_type` と `geometry_wkt` 列に出力されます。Pointジオメトリの場合は `longitude` と `latitude` 列も追加されます。プロパティはすべて列になります。生成されるCSVは**BOM付きUTF-8**です。<br>
+            <strong style="color: black;">※入力は完全なGeoJSON (FeatureCollection) オブジェクトである必要があります。</strong></p>
+
+            <label for="geojsonFile">GeoJSONファイルを選択:</label>
+            <input type="file" id="geojsonFile" accept=".json,.geojson" onchange="handleGeojsonFileChange()">
+            
+            <p style="text-align: center; margin: 10px 0;">または</p>
+
+            <label for="geojsonInputTextarea">GeoJSONテキストをペースト:</label>
+            <textarea id="geojsonInputTextarea" placeholder='{"type": "FeatureCollection", "features": [{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.837,35.405],[...]]]},"properties":{"polygon_uuid":"02f81...","daicho_shubetsu_cd":"FUD25"}}, ... ]}' rows="10"></textarea>
+
+            <button onclick="convertGeojsonToCsv()">CSVに変換</button>
+            <p id="geojsonToCsvMessage" class="message"></p>
+
+            <div class="output-section">
+                <h3>CSV出力</h3>
+                <textarea id="csvOutput" readonly></textarea>
+                <button onclick="downloadCsv()" id="downloadCsvButton" style="display: none;">CSVをダウンロード</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>CSV → GeoJSON</h2>
+            <p>CSVファイルを読み込み、GeoJSON形式に変換します。</p>
+            <p class="note">`geometry_type` と `geometry_wkt` 列に基づいてGeoJSONジオメトリを再構築します。それ以外の列はFeatureの `properties` に格納されます。Excelで編集したCSVは**「CSV UTF-8 (コンマ区切り)」**形式で保存してください。<br>
+            <strong style="color: black;">※入力はCSVヘッダーを含む完全なデータである必要があります。</strong></p>
+
+            <label for="csvFile">CSVファイルを選択:</label>
+            <input type="file" id="csvFile" accept=".csv" onchange="handleCsvFileChange()">
+
+            <p style="text-align: center; margin: 10px 0;">または</p>
+
+            <label for="csvInputTextarea">CSVテキストをペースト:</label>
+            <textarea id="csvInputTextarea" placeholder='geometry_type,geometry_wkt,daicho_shubetsu_cd,polygon_uuid&#10;Polygon,"POLYGON((132.837 35.405, ...))",FUD25,02f81000-...&#10;Polygon,"POLYGON((132.843 35.404, ...))",FUD25,35175...' rows="10"></textarea>
+
+            <button onclick="convertCsvToGeojson()">GeoJSONに変換</button>
+            <p id="csvToGeojsonMessage" class="message"></p>
+
+            <div class="output-section">
+                <h3>GeoJSON出力</h3>
+                <textarea id="geojsonOutput" readonly></textarea>
+                <button onclick="downloadGeojson()" id="downloadGeojsonButton" style="display: none;">GeoJSONをダウンロード</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentCsvString = '';
+        let currentGeojsonString = '';
+        let currentInputGeojsonFileName = 'geojson_data.geojson'; // ダウンロード用ファイル名の初期値
+        let currentInputCsvFileName = 'csv_data.csv'; // ダウンロード用ファイル名の初期値
+
+        // CSVのセル値を適切にエスケープする
+        function escapeCsvValue(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            let stringValue = String(value);
+            // カンマ、二重引用符、改行のいずれかが含まれる場合、全体を二重引用符で囲む
+            // 内部の二重引用符は "" に変換する
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.trim() === '') {
+                stringValue = '"' + stringValue.replace(/"/g, '""') + '"';
+            }
+            return stringValue;
+        }
+
+        // CSVのセル値をアンエスケープする
+        function unescapeCsvValue(value) {
+            if (typeof value !== 'string') {
+                return value;
+            }
+            // 先頭と末尾がダブルクォーテーションで囲まれている場合
+            if (value.startsWith('"') && value.endsWith('"')) {
+                // 囲いのダブルクォーテーションを外し、内部の "" を " に戻す
+                return value.substring(1, value.length - 1).replace(/""/g, '"');
+            }
+            return value;
+        }
+
+        // より堅牢なCSVラインパーサー (RFC 4180に準拠した簡略版)
+        function parseCsvLine(line) {
+            const values = [];
+            let inQuote = false;
+            let currentVal = '';
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuote && i + 1 < line.length && line[i + 1] === '"') { // 囲まれた中のエスケープされた二重引用符
+                        currentVal += '"';
+                        i++;
+                    } else { // 引用符の開始または終了
+                        inQuote = !inQuote;
+                    }
+                } else if (char === ',' && !inQuote) {
+                    values.push(currentVal);
+                    currentVal = '';
+                } else {
+                    currentVal += char;
+                }
+            }
+            values.push(currentVal); // 最後の値を追加
+            return values; // 各要素の空白をトリムしない (unescapeCsvValueで処理)
+        }
+
+        // GeoJSONジオメトリをWKT (Well-Known Text) 形式に変換する
+        function geometryToWkt(geometry) {
+            if (!geometry || !geometry.type || !geometry.coordinates) {
+                return '';
+            }
+
+            const type = geometry.type.toUpperCase();
+            const coords = geometry.coordinates;
+
+            function formatPoint(point) {
+                return `${point[0]} ${point[1]}`; // GeoJSON: [lon, lat] -> WKT: lon lat
+            }
+
+            function formatLinearRing(ring) {
+                return `(${ring.map(formatPoint).join(', ')})`;
+            }
+
+            switch (type) {
+                case 'POINT':
+                    return `POINT (${formatPoint(coords)})`;
+                case 'LINESTRING':
+                    return `LINESTRING (${coords.map(formatPoint).join(', ')})`;
+                case 'POLYGON':
+                    // GeoJSON coordinates: [[[lon,lat],...], [[lon,lat],...]] (exterior ring, then interior rings)
+                    // WKT: POLYGON((exterior_ring_points), (interior_ring_points), ...)
+                    return `POLYGON(${coords.map(formatLinearRing).join(', ')})`;
+                case 'MULTIPOINT':
+                    // WKT MULTIPOINTはポイントリストを直接取ることも、括弧で囲むことも可能。括弧で囲む形式を推奨。
+                    return `MULTIPOINT (${coords.map(p => `(${formatPoint(p)})`).join(', ')})`;
+                case 'MULTILINESTRING':
+                    // GeoJSON coordinates: [[[lon,lat],...], [[lon,lat],...]]
+                    // WKT: MULTILINESTRING((lon lat, ...), (lon lat, ...))
+                    return `MULTILINESTRING(${coords.map(line => formatLinearRing(line)).join(', ')})`;
+                case 'MULTIPOLYGON':
+                    // GeoJSON coordinates: [[[[lon,lat],...]], [[[lon,lat],...]]]
+                    // WKT: MULTIPOLYGON(((poly1_ext_ring), (poly1_int_ring)), ((poly2_ext_ring)))
+                    return `MULTIPOLYGON(${coords.map(poly => `(${poly.map(formatLinearRing).join(', ')})`).join(', ')})`;
+                case 'GEOMETRYCOLLECTION':
+                    const geoms = coords.map(g => geometryToWkt(g)).filter(Boolean);
+                    return `GEOMETRYCOLLECTION(${geoms.join(', ')})`;
+                default:
+                    return '';
+            }
+        }
+
+        // WKT (Well-Known Text) 形式の文字列をGeoJSONジオメトリオブジェクトに変換する
+        function wktToGeojsonGeometry(wktString) {
+            if (!wktString || typeof wktString !== 'string') {
+                return null;
+            }
+            wktString = wktString.trim();
+
+            // 正規表現を修正: $ではなく()を使用
+            const typeMatch = wktString.match(/^([A-Z]+)\s*$$(.*)$$$/i);
+            if (!typeMatch) {
+                console.warn("WKT to GeoJSON: 不明なWKT形式またはマッチング失敗", wktString);
+                return null; // 不明なWKT形式
+            }
+
+            const geometryType = typeMatch[1].toUpperCase();
+            const content = typeMatch[2]; // 外側の型括弧を除いた中身
+
+            function parsePointCoords(coordStr) {
+                const parts = coordStr.trim().split(/\s+/).map(parseFloat);
+                if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    return [parts[0], parts[1]]; // [longitude, latitude]
+                }
+                return null;
+            }
+
+            function parseLinearRingCoords(ringContent) {
+                // ringContent: "lon lat, lon lat, ..."
+                // カンマとスペースで区切られた座標ペアを解析
+                const coordPairs = ringContent.split(',').map(pair => pair.trim());
+                const parsedRing = [];
+                for (const pair of coordPairs) {
+                    const point = parsePointCoords(pair);
+                    if (point) parsedRing.push(point);
+                    else {
+                        console.warn("WKT to GeoJSON: 無効な座標ペア", pair);
+                        return null; // 無効なポイントがあればリング全体を無効とする
+                    }
+                }
+                // GeoJSONのPolygonはリングが閉じている必要があるため、閉じていない場合は閉じる (4点以上が必要)
+                if (parsedRing.length >= 3 && (parsedRing[0][0] !== parsedRing[parsedRing.length - 1][0] || parsedRing[0][1] !== parsedRing[parsedRing.length - 1][1])) {
+                    parsedRing.push(parsedRing[0]);
+                }
+                // GeoJSONのPolygonリングは最低4点（閉じた3角形）が必要
+                if (geometryType === 'POLYGON' && parsedRing.length < 4) {
+                    console.warn("WKT to GeoJSON: Polygonリングの点数が不足しています (最低4点)", parsedRing);
+                    return null;
+                }
+                return parsedRing.length > 0 ? parsedRing : null;
+            }
+            
+            // WKT内の括弧で囲まれた部分を安全に分割するヘルパー関数
+            // カンマで分割するが、括弧内のカンマは無視
+            function splitWktParts(wktContent) {
+                const parts = [];
+                let currentPart = '';
+                let parenCount = 0;
+                for (let i = 0; i < wktContent.length; i++) {
+                    const char = wktContent[i];
+                    if (char === '(') {
+                        parenCount++;
+                    } else if (char === ')') {
+                        parenCount--;
+                    } else if (char === ',' && parenCount === 0) { // 最上位レベルのカンマでのみ分割
+                        parts.push(currentPart.trim());
+                        currentPart = '';
+                        continue;
+                    }
+                    currentPart += char;
+                }
+                if (currentPart) {
+                    parts.push(currentPart.trim());
+                }
+                return parts;
+            }
+
+            switch (geometryType) {
+                case 'POINT':
+                    const pointCoords = parsePointCoords(content);
+                    if (pointCoords) return { type: 'Point', coordinates: pointCoords };
+                    console.warn("WKT to GeoJSON: Pointの座標解析失敗", content);
+                    break;
+                case 'LINESTRING':
+                    const lineCoords = parseLinearRingCoords(content);
+                    if (lineCoords) return { type: 'LineString', coordinates: lineCoords };
+                    console.warn("WKT to GeoJSON: LineStringの座標解析失敗", content);
+                    break;
+                case 'POLYGON':
+                    // WKTの`content`は`(exterior_ring), (interior_ring1), ...`の形式
+                    const polygonParts = splitWktParts(content);
+                    const polygonRings = [];
+                    for (const part of polygonParts) {
+                        if (part.startsWith('(') && part.endsWith(')')) {
+                            const ring = parseLinearRingCoords(part.substring(1, part.length - 1).trim());
+                            if (ring) {
+                                polygonRings.push(ring);
+                            } else {
+                                console.warn("WKT to GeoJSON: Polygon内のリング解析失敗", part);
+                                return null; // 無効なリング
+                            }
+                        } else {
+                            console.warn("WKT to GeoJSON: Polygon内のリング形式が無効", part);
+                            return null; // リング形式ではない
+                        }
+                    }
+                    if (polygonRings.length > 0) return { type: 'Polygon', coordinates: polygonRings };
+                    console.warn("WKT to GeoJSON: Polygon全体の解析失敗", content);
+                    break;
+                case 'MULTIPOINT':
+                    // WKTのMULTIPOINTは`POINT(x y), POINT(a b)`や`(x y), (a b)`など
+                    // contentが"x y, x y"のような形式の場合でも対応するため、splitWktPartsに渡す前に括弧で囲む
+                    const multiPointContent = content.startsWith('(') ? content : `(${content})`; 
+                    const multiPointParts = splitWktParts(multiPointContent);
+                    const multiPoints = [];
+                    for (const part of multiPointParts) {
+                        // "POINT (x y)" のような形式に対応
+                        // 正規表現を修正: $ではなく()を使用
+                        const innerPointMatch = part.match(/^(POINT\s*)?$$(.*)$$$/i);
+                        if (innerPointMatch) {
+                             const point = parsePointCoords(innerPointMatch[2].trim());
+                             if (point) multiPoints.push(point);
+                             else { console.warn("WKT to GeoJSON: MultiPoint内のPoint解析失敗", part); return null; }
+                        } else {
+                            // 括弧がない形式 (x y) に対応 (ただしGeoJSONとしてはPOINT (X Y)が標準)
+                            const point = parsePointCoords(part); 
+                            if (point) multiPoints.push(point);
+                            else { console.warn("WKT to GeoJSON: MultiPoint内のPoint解析失敗 (括弧なし)", part); return null; }
+                        }
+                    }
+                    if (multiPoints.length > 0) return { type: 'MultiPoint', coordinates: multiPoints };
+                    console.warn("WKT to GeoJSON: MultiPoint全体の解析失敗", content);
+                    break;
+                case 'MULTILINESTRING':
+                    const multiLineParts = splitWktParts(content);
+                    const multiLines = [];
+                    for (const part of multiLineParts) {
+                        if (part.startsWith('(') && part.endsWith(')')) {
+                            const line = parseLinearRingCoords(part.substring(1, part.length - 1).trim());
+                            if (line) multiLines.push(line);
+                            else { console.warn("WKT to GeoJSON: MultiLineString内のLineString解析失敗", part); return null; }
+                        } else {
+                            console.warn("WKT to GeoJSON: MultiLineString内のLineString形式が無効", part);
+                            return null;
+                        }
+                    }
+                    if (multiLines.length > 0) return { type: 'MultiLineString', coordinates: multiLines };
+                    console.warn("WKT to GeoJSON: MultiLineString全体の解析失敗", content);
+                    break;
+                case 'MULTIPOLYGON':
+                    const multiPolygonParts = splitWktParts(content);
+                    const multiPolygons = [];
+                    for (const polyPart of multiPolygonParts) {
+                        if (polyPart.startsWith('(') && polyPart.endsWith(')')) { // 各ポリゴンが最上位の括弧で囲まれている
+                            const innerContent = polyPart.substring(1, polyPart.length - 1).trim(); // 最外の括弧を剥がす
+                            const polyRings = [];
+                            const innerParts = splitWktParts(innerContent); // その中のリングを分割
+                            for (const innerPart of innerParts) {
+                                if (innerPart.startsWith('(') && innerPart.endsWith(')')) {
+                                    const ring = parseLinearRingCoords(innerPart.substring(1, innerPart.length - 1).trim());
+                                    if (ring) polyRings.push(ring);
+                                    else { console.warn("WKT to GeoJSON: MultiPolygon内のPolyRing解析失敗", innerPart); return null; }
+                                } else {
+                                    console.warn("WKT to GeoJSON: MultiPolygon内のPolyRing形式が無効", innerPart);
+                                    return null;
+                                }
+                            }
+                            if (polyRings.length > 0) multiPolygons.push(polyRings);
+                            else { console.warn("WKT to GeoJSON: MultiPolygon内のPolyRingsが空", polyPart); return null; }
+                        } else {
+                            console.warn("WKT to GeoJSON: MultiPolygon内のPolygon形式が無効", polyPart);
+                            return null;
+                        }
+                    }
+                    if (multiPolygons.length > 0) return { type: 'MultiPolygon', coordinates: multiPolygons };
+                    console.warn("WKT to GeoJSON: MultiPolygon全体の解析失敗", content);
+                    break;
+                case 'GEOMETRYCOLLECTION':
+                    console.warn("GeometryCollectionのWKTからGeoJSONへの変換は完全ではありません。手動で確認してください。", content);
+                    return null;
+            }
+            return null;
+        }
+
+        // ----------------------------------------------------------------------
+        // GeoJSON → CSV 処理ロジック
+        // ----------------------------------------------------------------------
+
+        // 実際のGeoJSONからCSVへの変換ロジック
+        function _processGeojsonToCsv(geojsonText, messageElement) {
+            const csvOutputTextarea = document.getElementById('csvOutput');
+            const downloadButton = document.getElementById('downloadCsvButton');
+
+            let data;
+            try {
+                data = JSON.parse(geojsonText);
+            } catch (jsonError) {
+                messageElement.textContent = "エラー: 無効なGeoJSON形式です。テキストの内容を確認してください。\n詳細: " + jsonError.message;
+                return;
+            }
+
+            if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
+                messageElement.textContent = "エラー: 入力されたJSONは 'FeatureCollection' タイプである必要があり、'features' 配列を含んでいる必要があります。";
+                return;
+            }
+
+            const features = data.features;
+            if (features.length === 0) {
+                csvOutputTextarea.value = "変換するフィーチャーがありません。";
+                currentCsvString = '';
+                downloadButton.style.display = 'none';
+                return;
+            }
+
+            const allPropertyHeaders = new Set();
+            let fixedHeaders = ['geometry_type', 'geometry_wkt'];
+            let hasPointGeometry = false;
+
+            // 1. 全てのフィーチャーのプロパティとジオメトリタイプから、全てのユニークなヘッダー（列名）を収集
+            features.forEach(feature => {
+                if (feature.geometry && feature.geometry.type === "Point") {
+                    hasPointGeometry = true;
+                }
+                if (feature.properties) {
+                    Object.keys(feature.properties).forEach(key => allPropertyHeaders.add(key));
+                }
+            });
+
+            // Pointジオメトリがある場合はlongitude/latitudeヘッダーを追加
+            if (hasPointGeometry) {
+                fixedHeaders.push('longitude', 'latitude');
+            }
+
+            // 特定のプロパティを優先的な順序で固定ヘッダーに追加
+            const preferredProps = ['daicho_shubetsu_cd', 'polygon_uuid'];
+            preferredProps.forEach(prop => {
+                if (allPropertyHeaders.has(prop)) {
+                    if (!fixedHeaders.includes(prop)) { // すでに追加されていないか確認
+                       fixedHeaders.push(prop);
+                    }
+                    allPropertyHeaders.delete(prop); // 既に処理したものはSetから削除
+                }
+            });
+
+            // 残りのプロパティヘッダーをアルファベット順にソートして追加
+            const sortedRemainingPropertyHeaders = Array.from(allPropertyHeaders).sort();
+            const headerArray = [...fixedHeaders, ...sortedRemainingPropertyHeaders];
+
+            const rows = [];
+            // 2. CSVヘッダー行を作成
+            rows.push(headerArray.map(h => escapeCsvValue(h)).join(','));
+
+            // 3. 各フィーチャーからデータ行を作成
+            features.forEach(feature => {
+                const rowData = [];
+                const featureProperties = feature.properties || {};
+                const featureGeometry = feature.geometry;
+
+                headerArray.forEach(header => {
+                    let value = '';
+
+                    if (header === 'geometry_type') {
+                        value = featureGeometry ? featureGeometry.type : '';
+                    } else if (header === 'geometry_wkt') {
+                        value = geometryToWkt(featureGeometry);
+                    } else if (header === "longitude") {
+                        if (featureGeometry && featureGeometry.type === "Point" && Array.isArray(featureGeometry.coordinates)) {
+                            value = featureGeometry.coordinates[0];
+                        }
+                    } else if (header === "latitude") {
+                        if (featureGeometry && featureGeometry.type === "Point" && Array.isArray(featureGeometry.coordinates)) {
+                            value = featureGeometry.coordinates[1];
+                        }
+                    } else if (featureProperties.hasOwnProperty(header)) {
+                        value = featureProperties[header];
+                    }
+                    rowData.push(escapeCsvValue(value));
+                });
+                rows.push(rowData.join(','));
+            });
+
+            currentCsvString = rows.join('\n');
+            csvOutputTextarea.value = currentCsvString;
+            downloadButton.style.display = 'inline-block';
+            messageElement.textContent = "GeoJSONからCSVへの変換が完了しました。";
+        }
+
+
+        // GeoJSONファイルを読み込むか、テキストエリアから取得してCSVに変換する
+        function convertGeojsonToCsv() {
+            const fileInput = document.getElementById('geojsonFile');
+            const geojsonInputTextarea = document.getElementById('geojsonInputTextarea');
+            const messageElement = document.getElementById('geojsonToCsvMessage');
+            
+            // Clear previous outputs/messages
+            document.getElementById('csvOutput').value = '';
+            document.getElementById('downloadCsvButton').style.display = 'none';
+            messageElement.textContent = '';
+            currentCsvString = '';
+
+            if (geojsonInputTextarea.value.trim()) {
+                // Textarea input takes precedence
+                currentInputGeojsonFileName = 'input_text.geojson'; // Default name for textarea input
+                _processGeojsonToCsv(geojsonInputTextarea.value, messageElement);
+            } else if (fileInput.files[0]) {
+                // File input (content already loaded into textarea by handleGeojsonFileChange)
+                currentInputGeojsonFileName = fileInput.files[0].name;
+                _processGeojsonToCsv(geojsonInputTextarea.value, messageElement); // Use content from textarea
+            } else {
+                messageElement.textContent = "GeoJSONファイルを選択するか、GeoJSONテキストをペーストしてください。";
+            }
+        }
+
+        // GeoJSONファイル選択時のイベントハンドラ
+        function handleGeojsonFileChange() {
+            const fileInput = document.getElementById('geojsonFile');
+            const geojsonInputTextarea = document.getElementById('geojsonInputTextarea');
+            const messageElement = document.getElementById('geojsonToCsvMessage');
+
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    geojsonInputTextarea.value = e.target.result; // ファイル内容をテキストエリアに表示
+                    messageElement.textContent = `ファイル '${file.name}' が読み込まれました。`;
+                };
+                reader.onerror = function(e) {
+                    messageElement.textContent = "エラー: ファイルの読み込み中にエラーが発生しました: " + reader.error.message;
+                };
+                reader.readAsText(file, 'UTF-8');
+            } else {
+                geojsonInputTextarea.value = ''; // ファイルが選択解除されたらクリア
+                messageElement.textContent = '';
+            }
+        }
+
+
+        // 生成されたCSVデータをBOM付きUTF-8でダウンロードする
+        function downloadCsv() {
+            const messageElement = document.getElementById('geojsonToCsvMessage');
+
+            if (!currentCsvString) {
+                messageElement.textContent = "ダウンロードするCSVデータがありません。先にGeoJSONをCSVに変換してください。";
+                return;
+            }
+
+            let downloadFileName = 'geojson_data.csv';
+            const originalFileName = currentInputGeojsonFileName;
+
+            const lastDotIndex = originalFileName.lastIndexOf('.');
+            if (lastDotIndex > 0) {
+                downloadFileName = originalFileName.substring(0, lastDotIndex) + '.csv';
+            } else {
+                downloadFileName = originalFileName + '.csv';
+            }
+
+            // BOM (Byte Order Mark) を追加したUTF-8
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([bom, currentCsvString], { type: 'text/csv;charset=utf-8-sig;' }); // text/csv;charset=utf-8-sig; は BOM付きUTF-8を示す
+
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', downloadFileName);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                messageElement.textContent = "お使いのブラウザはファイルダウンロードをサポートしていません。CSVデータをコピーして、別のエディタでBOM付きUTF-8として保存してください。";
+            }
+        }
+
+        // ----------------------------------------------------------------------
+        // CSV → GeoJSON 処理ロジック
+        // ----------------------------------------------------------------------
+
+        // 実際のCSVからGeoJSONへの変換ロジック
+        function _processCsvToGeojson(csvData, messageElement) {
+            const geojsonOutputTextarea = document.getElementById('geojsonOutput');
+            const downloadButton = document.getElementById('downloadGeojsonButton');
+
+            const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== ''); // 空行を除外
+
+            if (lines.length < 2) {
+                messageElement.textContent = "エラー: CSVにはヘッダーと少なくとも1つのデータ行が必要です。";
+                return;
+            }
+
+            const headerLine = lines[0];
+            const headers = parseCsvLine(headerLine).map(h => unescapeCsvValue(h));
+
+            const features = [];
+            for (let i = 1; i < lines.length; i++) {
+                const dataLine = lines[i];
+                const values = parseCsvLine(dataLine); // 堅牢なパーサーを使用
+
+                if (values.length !== headers.length) {
+                    messageElement.textContent += `\n警告(行 ${i + 1}): 列数がヘッダーと一致しません。この行はスキップされます。\n元の行: ${dataLine}`;
+                    continue;
+                }
+
+                const properties = {};
+                let geometry = null;
+                let geometryType = '';
+                let geometryWkt = '';
+                let tempLongitude = null;
+                let tempLatitude = null;
+
+
+                headers.forEach((header, index) => {
+                    const value = unescapeCsvValue(values[index]); // unescapeを適用
+
+                    if (header === 'geometry_type') {
+                        geometryType = value;
+                    } else if (header === 'geometry_wkt') {
+                        geometryWkt = value;
+                    } else if (header === 'longitude') {
+                        tempLongitude = parseFloat(value);
+                    } else if (header === 'latitude') {
+                        tempLatitude = parseFloat(value);
+                    } else {
+                        // 空文字列はnullにする（GeoJSONの仕様としては厳密には不要だが、プロパティをよりクリーンに保つため）
+                        properties[header] = value === '' ? null : value;
+                    }
+                });
+                
+                // geometry_wktがあればそれを優先してジオメトリを生成
+                if (geometryWkt) {
+                    geometry = wktToGeojsonGeometry(geometryWkt);
+                }
+                // もしgeometry_typeがPointで、geometryWktがなく、かつlongitude/latitudeがある場合
+                else if (geometryType === 'Point' && tempLongitude !== null && tempLatitude !== null) {
+                    geometry = { type: 'Point', coordinates: [tempLongitude, tempLatitude] };
+                }
+
+
+                if (geometry) {
+                    features.push({
+                        type: 'Feature',
+                        geometry: geometry,
+                        properties: properties
+                    });
+                } else {
+                    messageElement.textContent += `\n警告(行 ${i + 1}): ジオメトリ情報が無効です。Featureとして追加できませんでした。\n元の行: ${dataLine}`;
+                }
+            }
+
+            const geojson = {
+                type: 'FeatureCollection',
+                features: features
+            };
+
+            currentGeojsonString = JSON.stringify(geojson, null, 2); // 整形して表示
+            geojsonOutputTextarea.value = currentGeojsonString;
+            downloadButton.style.display = 'inline-block';
+            messageElement.textContent = "CSVからGeoJSONへの変換が完了しました。";
+        }
+
+        // CSVファイルを読み込むか、テキストエリアから取得してGeoJSONに変換する
+        function convertCsvToGeojson() {
+            const fileInput = document.getElementById('csvFile');
+            const csvInputTextarea = document.getElementById('csvInputTextarea');
+            const messageElement = document.getElementById('csvToGeojsonMessage');
+
+            // Clear previous outputs/messages
+            document.getElementById('geojsonOutput').value = '';
+            document.getElementById('downloadGeojsonButton').style.display = 'none';
+            messageElement.textContent = '';
+            currentGeojsonString = '';
+
+            if (csvInputTextarea.value.trim()) {
+                // Textarea input takes precedence
+                currentInputCsvFileName = 'input_text.csv'; // Default name for textarea input
+                _processCsvToGeojson(csvInputTextarea.value, messageElement);
+            } else if (fileInput.files[0]) {
+                // File input (content already loaded into textarea by handleCsvFileChange)
+                currentInputCsvFileName = fileInput.files[0].name;
+                _processCsvToGeojson(csvInputTextarea.value, messageElement); // Use content from textarea
+            } else {
+                messageElement.textContent = "CSVファイルを選択するか、CSVテキストをペーストしてください。";
+            }
+        }
+
+        // CSVファイル選択時のイベントハンドラ
+        function handleCsvFileChange() {
+            const fileInput = document.getElementById('csvFile');
+            const csvInputTextarea = document.getElementById('csvInputTextarea');
+            const messageElement = document.getElementById('csvToGeojsonMessage');
+
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    csvInputTextarea.value = e.target.result; // ファイル内容をテキストエリアに表示
+                    messageElement.textContent = `ファイル '${file.name}' が読み込まれました。`;
+                };
+                reader.onerror = function(e) {
+                    messageElement.textContent = "エラー: ファイルの読み込み中にエラーが発生しました: " + reader.error.message;
+                };
+                reader.readAsText(file, 'UTF-8'); // Excelで保存されたBOM付きUTF-8 CSVに対応するため'UTF-8'を指定
+            } else {
+                csvInputTextarea.value = ''; // ファイルが選択解除されたらクリア
+                messageElement.textContent = '';
+            }
+        }
+
+
+        // 生成されたGeoJSONデータをダウンロードする
+        function downloadGeojson() {
+            const messageElement = document.getElementById('csvToGeojsonMessage');
+
+            if (!currentGeojsonString) {
+                messageElement.textContent = "ダウンロードするGeoJSONデータがありません。先にCSVをGeoJSONに変換してください。";
+                return;
+            }
+
+            let downloadFileName = 'converted_data.geojson';
+            const originalFileName = currentInputCsvFileName;
+
+            const lastDotIndex = originalFileName.lastIndexOf('.');
+            if (lastDotIndex > 0) {
+                downloadFileName = originalFileName.substring(0, lastDotIndex) + '.geojson';
+            } else {
+                downloadFileName = originalFileName + '.geojson';
+            }
+
+            const blob = new Blob([currentGeojsonString], { type: 'application/json;charset=utf-8;' });
+            const link = document.createElement('a');
+
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', downloadFileName);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                messageElement.textContent = "お使いのブラウザはファイルダウンロードをサポートしていません。GeoJSONデータをコピーして、別のエディタでUTF-8として保存してください。";
+            }
+        }
+    </script>
+</body>
+</html>
