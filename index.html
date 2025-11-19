@@ -1,1 +1,55 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ALmap メインページ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    select {
+      font-size: 18px;
+      padding: 6px;
+      margin: 10px;
+    }
+    button {
+      font-size: 18px;
+      padding: 8px 16px;
+      margin-top: 10px;
+      background: #1565c0;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0d47a1;
+    }
+  </style>
+</head>
+<body>
+  <h1>ALmap メインページ</h1>
+  <p>表示したい地図ファイルを選んでください。</p>
+
+  <!-- ✅ 選択メニュー -->
+  <select id="mapSelect">
+    <option value="ALmap.htm">ALmap</option>
+    <option value="ALmap2.htm">ALmap2</option>
+    <option value="ALmap3.htm">ALmap3</option>
+  </select>
+
+  <!-- ✅ 開くボタン -->
+  <button onclick="openMap()">開く</button>
+
+  <script>
+    function openMap() {
+      const selectedFile = document.getElementById("mapSelect").value;
+      // 同じフォルダ内のファイルを開く
+      window.location.href = selectedFile;
+    }
+  </script>
+</body>
+</html>
