@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SJIS CSV to GeoJSON Converter</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box; /* Paddingとborderをwidthに含める */
+            resize: vertical;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-top: 5px; /* スペース調整 */
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:active {
+            background-color: #004085;
+        }
+        .output-section {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .output-section h2 {
+            color: #007bff;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #message {
+            color: red;
+            margin-top: 10px;
+        }
+        .note {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+        .warning {
+            color: orange;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SJIS CSV から GeoJSON (FeatureCollection) への変換</h1>
+
+        <p>SJISでエンコードされたCSVファイルを選択し、「GeoJSONに変換」ボタンをクリックしてください。入力ファイルが `example.csv` の場合、出力ファイルは `example.geojson` となります。</p>
+        <p class="note warning">CSVには、経度を表す **`longitude`** および緯度を表す **`latitude`** の列が必要です。これらの列が見つからない場合、Pointジオメトリは作成されません。</p>
+
+        <label for="csvFile">SJIS CSVファイルを選択:</label>
+        <input type="file" id="csvFile" accept=".csv">
+
+        <button onclick="convertToGeojson()">GeoJSONに変換</button>
+        <p id="message"></p>
+
+        <div class="output-section">
+            <h2>GeoJSON出力</h2>
+            <textarea id="geojsonOutput" readonly></textarea>
+            <button onclick="downloadGeojson()" id="downloadButton" style="display: none;">GeoJSONをダウンロード</button>
+        </div>
+    </div>
+
+    <script>
+        let currentGeojsonString = ''; // 生成されたGeoJSONデータを保持するグローバル変数
+
+        /**
+         * CSVのセル値から二重引用符とエスケープされた二重引用符を取り除く
+         * (例: `"value with ""quotes"""` -> `value with "quotes"`)
+         */
+        function unescapeCsvValue(value) {
+            if (value.startsWith('"') && value.endsWith('"')) {
+                value = value.substring(1, value.length - 1);
+                value = value.replace(/""/g, '"'); // エスケープされた二重引用符を元に戻す
+            }
+            return value;
+        }
+
+        /**
+         * CSV文字列をパースしてヘッダーとデータ行の配列を返す。
+         * 正しい引用符の処理をサポートします。
+         */
+        function parseCsv(csvString) {
+            const lines = csvString.split(/\r?\n/); // 改行コード \r\n および \n に対応
+            const data = [];
+            let inQuote = false;
+            let currentField = '';
+            let currentRow = [];
+
+            for (const line of lines) {
+                if (line.trim() === '') continue; // 空行をスキップ
+
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+
+                    if (char === '"') {
+                        // クォート内のエスケープされた二重引用符 `""`
+                        if (inQuote && i + 1 < line.length && line[i+1] === '"') {
+                            currentField += '"';
+                            i++; // 次の引用符をスキップ
+                        } else {
+                            // 引用符の開始または終了
+                            inQuote = !inQuote;
+                        }
+                    } else if (char === ',' && !inQuote) {
+                        // クォート外のカンマはフィールドの区切り
+                        currentRow.push(currentField);
+                        currentField = '';
+                    } else {
+                        // 通常の文字
+                        currentField += char;
+                    }
+                }
+                // 行の終わり、最後のフィールドをプッシュ
+                currentRow.push(currentField);
+                data.push(currentRow);
+                currentRow = [];
+                currentField = '';
+                inQuote = false; // 次の行のためにinQuote状態をリセット
+            }
+            return data;
+        }
+
+
+        /**
+         * SJIS CSVファイルを読み込み、GeoJSONに変換して表示する
+         */
+        function convertToGeojson() {
+            const fileInput = document.getElementById('csvFile');
+            const geojsonOutput = document.getElementById('geojsonOutput');
+            const downloadButton = document.getElementById('downloadButton');
+            const messageElement = document.getElementById('message');
+
+            geojsonOutput.value = ''; // 以前の出力をクリア
+            downloadButton.style.display = 'none'; // ダウンロードボタンを非表示
+            messageElement.textContent = ''; // メッセージをクリア
+
+            const file = fileInput.files[0];
+            if (!file) {
+                messageElement.textContent = "SJIS CSVファイルを選択してください。";
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                let csvString = e.target.result;
+                const parsedCsv = parseCsv(csvString);
+
+                if (parsedCsv.length === 0) {
+                    messageElement.textContent = "CSVファイルにデータがありません。";
+                    currentGeojsonString = '';
+                    return;
+                }
+
+                // ヘッダー行をパースし、前後の空白を除去
+                const headers = parsedCsv[0].map(h => unescapeCsvValue(h).trim());
+                const longitudeColIndex = headers.indexOf('longitude');
+                const latitudeColIndex = headers.indexOf('latitude');
+
+                if (longitudeColIndex === -1 || latitudeColIndex === -1) {
+                    messageElement.textContent = "CSVヘッダーに 'longitude' または 'latitude' 列が見つかりません。GeoJSON Pointフィーチャーを作成できません。";
+                    currentGeojsonString = '';
+                    return;
+                }
+
+                const features = [];
+
+                // データ行を処理（ヘッダー行の次から）
+                for (let i = 1; i < parsedCsv.length; i++) {
+                    const row = parsedCsv[i];
+                    // 行の列数がヘッダーと一致しない場合は警告しスキップ
+                    if (row.length !== headers.length) {
+                        messageElement.textContent += `\n警告: ${i + 1}行目の列数 (${row.length}) がヘッダー (${headers.length}) と一致しません。この行はスキップされます。`;
+                        continue;
+                    }
+
+                    const properties = {};
+                    let longitude = null;
+                    let latitude = null;
+                    let isValidFeature = true;
+
+                    for (let j = 0; j < headers.length; j++) {
+                        const header = headers[j];
+                        const value = unescapeCsvValue(row[j]);
+
+                        if (j === longitudeColIndex) {
+                            longitude = parseFloat(value);
+                            if (isNaN(longitude)) {
+                                messageElement.textContent += `\n警告: ${i + 1}行目の 'longitude' 値が無効です ('${value}')。このフィーチャーはスキップされます。`;
+                                isValidFeature = false;
+                                break; // このフィーチャーをスキップするためにループを抜ける
+                            }
+                        } else if (j === latitudeColIndex) {
+                            latitude = parseFloat(value);
+                            if (isNaN(latitude)) {
+                                messageElement.textContent += `\n警告: ${i + 1}行目の 'latitude' 値が無効です ('${value}')。このフィーチャーはスキップされます。`;
+                                isValidFeature = false;
+                                break; // このフィーチャーをスキップするためにループを抜ける
+                            }
+                        } else {
+                            properties[header] = value;
+                        }
+                    }
+
+                    if (isValidFeature && longitude !== null && latitude !== null) {
+                        features.push({
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: [longitude, latitude] // GeoJSONは [経度, 緯度] の順
+                            },
+                            properties: properties
+                        });
+                    }
+                }
+
+                if (features.length === 0) {
+                    messageElement.textContent = (messageElement.textContent ? messageElement.textContent + "\n" : "") + "有効なGeoJSONフィーチャーが生成されませんでした。座標値を確認してください。";
+                    currentGeojsonString = '';
+                    return;
+                }
+
+                const geojson = {
+                    type: 'FeatureCollection',
+                    features: features
+                };
+
+                currentGeojsonString = JSON.stringify(geojson, null, 2); // 読みやすいように整形して表示
+                geojsonOutput.value = currentGeojsonString;
+                downloadButton.style.display = 'inline-block'; // ダウンロードボタンを表示
+                messageElement.textContent = (messageElement.textContent ? messageElement.textContent + "\n" : "") + "GeoJSON変換が完了しました。";
+            };
+
+            reader.onerror = function(e) {
+                messageElement.textContent = "ファイルの読み込み中にエラーが発生しました: " + reader.error.message;
+            };
+
+            // SJISエンコーディングでファイルを読み込む
+            reader.readAsText(file, 'Shift_JIS');
+        }
+
+        /**
+         * 生成されたGeoJSONデータをUTF-8でエンコードし、ファイルとしてダウンロードする
+         * 入力ファイル名に基づき、拡張子を '.geojson' に変更した名前でダウンロードします。
+         */
+        function downloadGeojson() {
+            const messageElement = document.getElementById('message');
+            const fileInput = document.getElementById('csvFile');
+
+            if (!currentGeojsonString) {
+                messageElement.textContent = "ダウンロードするGeoJSONデータがありません。先にCSVをGeoJSONに変換してください。";
+                return;
+            }
+
+            let downloadFileName = 'data.geojson'; // デフォルトのファイル名
+            if (fileInput.files.length > 0) {
+                const originalFileName = fileInput.files[0].name;
+                const lastDotIndex = originalFileName.lastIndexOf('.');
+                if (lastDotIndex > 0) {
+                    // 既存の拡張子を '.geojson' に置き換える
+                    downloadFileName = originalFileName.substring(0, lastDotIndex) + '.geojson';
+                } else {
+                    // 拡張子がない場合、末尾に '.geojson' を追加する
+                    downloadFileName = originalFileName + '.geojson';
+                }
+            }
+
+            // Blobを作成し、ダウンロードリンクを生成 (UTF-8エンコーディング)
+            const blob = new Blob([currentGeojsonString], { type: 'application/json;charset=utf-8;' });
+            const link = document.createElement('a');
+
+            // ブラウザがdownload属性をサポートしているかチェック
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', downloadFileName); // ダウンロードファイル名
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click(); // クリックイベントをプログラムから発行
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url); // オブジェクトURLを解放 (メモリリーク防止)
+            } else {
+                messageElement.textContent = "お使いのブラウザはファイルダウンロードをサポートしていません。GeoJSONデータをコピーして、別のエディタでUTF-8として保存してください。";
+            }
+        }
+    </script>
+</body>
+</html>
