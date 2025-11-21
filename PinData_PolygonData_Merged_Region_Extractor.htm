@@ -30,14 +30,14 @@
 <body>
     <div class="container">
         <h1>🗺️ GeoJSON 地域別抽出（BBox空間照合）＆ダウンロードツール</h1>
-        <p>GeoJSONファイル (`.geojson`, `.json`) をアップロードし、地域を選択することで、**選択した地域のピンの座標範囲 (BBox)** と**交差するポリゴン**を抽出・ダウンロードします。</p>
+        <p>ピンとポリゴンのGeoJSONファイル (`.geojson`, `.json`) をアップロードし、地域を選択することで、**選択した地域のピンの座標範囲 (BBox)** と**交差するポリゴン**を抽出・ダウンロードします。</p>
 
         <div id="file-input">
             <input type="file" id="geojsonFileInput" accept=".geojson,.json" multiple>
             <button onclick="processFiles()" id="processBtn" class="process-button">ファイルを処理 (重複削除・地域グルーピング)</button>
             <div id="statusMessage" style="display:none;"></div>
         </div>
-
+<!--
         <div id="settings-area">
             <h3>🗺️ 空間照合の設定 (※現在は属性キーを使用しません)</h3>
             <p>現在の抽出ロジックは、選択地域のピンの座標から計算される**四角形 (BBox)** と、ポリゴンのBBoxの**交差判定**に基づいています。このため、以下のキー設定は無視されます。</p>
@@ -46,9 +46,9 @@
             <label for="polyKey" style="margin-left: 20px;">📐 ポリゴンデータの照合キー (無視):</label>
             <input type="text" id="polyKey" placeholder="Polygon Key Name" value="id" style="width: 150px;" disabled>
         </div>
-
+-->
         <div id="address-selection">
-            <h3>地域選択 (加工済み住所)</h3>
+            <h3>地域選択</h3>
             <p>※ファイルを処理後、ここに地域リストが表示されます。</p>
             <div id="radioButtonsContainer" class="radio-container">
                 <p>データなし</p>
