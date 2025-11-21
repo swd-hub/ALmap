@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON Pin & Polygon マージ・ユニーク化ツール</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        h1 {
+            color: #1abc9c; /* 統合ツールの色（エメラルドグリーン系） */
+            text-align: center;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .step {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .step:last-child {
+            border-bottom: none;
+        }
+        h2 {
+            font-size: 1.3em;
+            color: #3498db; /* ステップカラー（青系） */
+            margin-bottom: 15px;
+        }
+        h3 {
+            font-size: 1.1em;
+            margin-top: 15px;
+            color: #2980b9;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #fafafa;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="file"]:hover {
+            border-color: #3498db;
+            background: #f8faff;
+        }
+        button {
+            background-color: #1abc9c;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #16a085;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .stats {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .file-section {
+            display: flex;
+            gap: 20px;
+        }
+        .file-input-group {
+            flex: 1;
+        }
+        .file-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+            font-size: 0.9em;
+            color: #555;
+            max-height: 100px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 5px;
+        }
+        .file-list li {
+            margin-bottom: 3px;
+        }
+        .clear-btn {
+            background-color: #95a5a6;
+            margin-top: 5px;
+            width: auto;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            display: inline-block;
+        }
+        .clear-btn:hover {
+            background-color: #7f8c8d;
+        }
+        .output-group {
+            margin-bottom: 20px;
+        }
+        .output-group h3 {
+            margin-bottom: 10px;
+            border-bottom: 1px dotted #ccc;
+        }
+        .output-group button {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>GeoJSON Pin & Polygon マージ・ユニーク化</h1>
+        <p>複数のGeoJSONファイルを読み込み、ピン（Point）とポリゴン（その他の形状）を分離し、それぞれを結合・重複削除して出力します。</p>
+
+        <div class="step">
+            <h2>1. GeoJSONファイル選択 (共通)</h2>
+            <div class="file-section">
+                <div class="file-input-group">
+                    <h3>ピン（Point）ファイル (追加入力可) 📍</h3>
+                    <label for="pinFiles">GeoJSONファイル (.json, .geojson):</label>
+                    <p class="stats">※ ファイルを選択するたびにリストに追加されます。</p>
+                    <input type="file" id="pinFiles" accept=".json,.geojson" multiple onchange="addFiles('pin')">
+                    <ul id="pinFileList" class="file-list"></ul>
+                    <button onclick="clearGeoJsonFiles('pin')" class="clear-btn">全ファイルクリア (ピン)</button>
+                </div>
+
+                <div class="file-input-group">
+                    <h3>ポリゴン/ラインファイル (追加入力可) 📐</h3>
+                    <label for="polyFiles">GeoJSONファイル (.json, .geojson):</label>
+                    <p class="stats">※ ファイルを選択するたびにリストに追加されます。</p>
+                    <input type="file" id="polyFiles" accept=".json,.geojson" multiple onchange="addFiles('poly')">
+                    <ul id="polyFileList" class="file-list"></ul>
+                    <button onclick="clearGeoJsonFiles('poly')" class="clear-btn">全ファイルクリア (ポリゴン他)</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="step">
+            <h2>2. 処理実行</h2>
+            <p class="stats">※ 「形状(座標)」と「属性(プロパティ)」の両方が完全に一致するフィーチャーを重複とみなします。</p>
+            <button onclick="processFiles()" id="processBtn">ピンとポリゴンをそれぞれマージ・重複削除</button>
+            <div id="statusMessage" class="message"></div>
+        </div>
+
+        <div class="step">
+            <h2>3. 結果出力</h2>
+            <div class="output-group">
+                <h3>ピン (Point) の結果 📍</h3>
+                <textarea id="outputPinArea" readonly placeholder="ユニークなピンのGeoJSONが出力されます..."></textarea>
+                <button onclick="downloadResult('pin')" id="downloadPinBtn" style="display:none;">ダウンロード (merged_unique_points.geojson)</button>
+            </div>
+            
+            <div class="output-group">
+                <h3>ポリゴン/ラインの結果 📐</h3>
+                <textarea id="outputPolyArea" readonly placeholder="ユニークなポリゴン/ラインのGeoJSONが出力されます..."></textarea>
+                <button onclick="downloadResult('poly')" id="downloadPolyBtn" style="display:none;">ダウンロード (merged_unique_poly.geojson)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pinResultString = "";
+        let polyResultString = "";
+        let uploadedGeoJsonFiles = {
+            pin: [],
+            poly: []
+        };
+
+        // 0. GeoJSONファイルを追加入力する関数
+        function addFiles(type) {
+            const inputId = type === 'pin' ? 'pinFiles' : 'polyFiles';
+            const input = document.getElementById(inputId);
+            
+            // 新しく選択されたファイルを既存のリストに追加
+            uploadedGeoJsonFiles[type] = uploadedGeoJsonFiles[type].concat(Array.from(input.files));
+            
+            // ファイル入力フィールドをクリア（同じファイルを再度選択可能にするため）
+            input.value = null; 
+
+            updateFileList(type);
+        }
+
+        // 1. ファイルリスト表示の更新
+        function updateFileList(type) {
+            const listId = type === 'pin' ? 'pinFileList' : 'polyFileList';
+            const list = document.getElementById(listId);
+            list.innerHTML = '';
+            const files = uploadedGeoJsonFiles[type];
+            
+            if (files.length > 0) {
+                files.forEach(file => {
+                    const li = document.createElement('li');
+                    li.textContent = `${type === 'pin' ? '📍' : '📐'} ${file.name}`;
+                    list.appendChild(li);
+                });
+
+                const totalLi = document.createElement('li');
+                totalLi.innerHTML = `--- <strong>合計 ${files.length} ファイルを選択済み</strong> ---`;
+                list.appendChild(totalLi);
+            } else {
+                const li = document.createElement('li');
+                li.textContent = `ファイルが選択されていません。`;
+                list.appendChild(li);
+            }
+        }
+
+        // 選択されたGeoJSONファイルをクリアする関数
+        function clearGeoJsonFiles(type) {
+            uploadedGeoJsonFiles[type] = [];
+            updateFileList(type);
+        }
+        
+        // 2. 正規化文字列変換（オブジェクトのキー順序に依存しない比較用）
+        function consistentStringify(obj) {
+            if (obj === null || typeof obj !== 'object') {
+                return JSON.stringify(obj);
+            }
+            
+            if (Array.isArray(obj)) {
+                return '[' + obj.map(item => consistentStringify(item)).join(',') + ']';
+            }
+            
+            const sortedKeys = Object.keys(obj).sort();
+            const parts = sortedKeys.map(key => {
+                return JSON.stringify(key) + ':' + consistentStringify(obj[key]);
+            });
+            return '{' + parts.join(',') + '}';
+        }
+
+        // 3. 重複削除のコアロジック
+        function getUniqueFeatures(features) {
+            const uniqueFeatures = [];
+            const seenSignatures = new Set();
+            
+            features.forEach(feature => {
+                if (feature.geometry) {
+                    // 座標と属性の両方をキーにして重複チェック
+                    const geomStr = consistentStringify(feature.geometry);
+                    const propStr = consistentStringify(feature.properties);
+                    const signature = `${geomStr}|${propStr}`;
+
+                    if (!seenSignatures.has(signature)) {
+                        seenSignatures.add(signature);
+                        uniqueFeatures.push(feature);
+                    }
+                }
+            });
+            return uniqueFeatures;
+        }
+
+        // 4. ファイルの読み込みとFeaturesの抽出
+        async function loadFeatures(files) {
+            if (files.length === 0) return [];
+            
+            const filePromises = files.map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        try {
+                            const json = JSON.parse(e.target.result);
+                            // FeatureCollectionまたは単独FeatureからFeatureを抽出
+                            let features = [];
+                            if (json.type === "FeatureCollection" && Array.isArray(json.features)) {
+                                features = json.features;
+                            } else if (json.type === "Feature") {
+                                features.push(json);
+                            }
+                            resolve(features);
+                        } catch (err) {
+                            reject(`ファイル「${file.name}」は有効なGeoJSONではありません。`);
+                        }
+                    };
+                    reader.onerror = () => reject(`ファイル「${file.name}」の読み込みに失敗しました。`);
+                    reader.readAsText(file);
+                });
+            });
+
+            const results = await Promise.all(filePromises);
+            
+            // 全てのFeatureをフラットな配列に結合
+            return results.flat();
+        }
+
+        // 5. メイン処理実行
+        async function processFiles() {
+            const statusDiv = document.getElementById('statusMessage');
+            const outputPinArea = document.getElementById('outputPinArea');
+            const outputPolyArea = document.getElementById('outputPolyArea');
+            const downloadPinBtn = document.getElementById('downloadPinBtn');
+            const downloadPolyBtn = document.getElementById('downloadPolyBtn');
+            const processBtn = document.getElementById('processBtn');
+
+            const allFiles = uploadedGeoJsonFiles.pin.length + uploadedGeoJsonFiles.poly.length;
+            if (allFiles === 0) {
+                alert("GeoJSONファイルを選択してください。");
+                return;
+            }
+
+            processBtn.disabled = true;
+            processBtn.textContent = "処理中...";
+            statusDiv.style.display = 'none';
+            outputPinArea.value = "";
+            outputPolyArea.value = "";
+            downloadPinBtn.style.display = "none";
+            downloadPolyBtn.style.display = "none";
+            pinResultString = "";
+            polyResultString = "";
+
+            try {
+                // --- A. 全Featureの読み込みと分離 ---
+                const pinFiles = uploadedGeoJsonFiles.pin;
+                const polyFiles = uploadedGeoJsonFiles.poly;
+                
+                const [allPinFeatures, allPolyFeatures] = await Promise.all([
+                    loadFeatures(pinFiles),
+                    loadFeatures(polyFiles)
+                ]);
+
+                // --- B. ピンの重複削除 ---
+                const totalPinCount = allPinFeatures.length;
+                const uniquePinFeatures = getUniqueFeatures(allPinFeatures);
+                const uniquePinCount = uniquePinFeatures.length;
+                
+                pinResultString = JSON.stringify({
+                    type: "FeatureCollection",
+                    features: uniquePinFeatures.filter(f => f.geometry.type === "Point") // 念のためPointのみフィルタ
+                }, null, 2);
+                
+                outputPinArea.value = pinResultString;
+                
+                // --- C. ポリゴン/ラインの重複削除 ---
+                const totalPolyCount = allPolyFeatures.length;
+                const uniquePolyFeatures = getUniqueFeatures(allPolyFeatures);
+                const uniquePolyCount = uniquePolyFeatures.length;
+
+                polyResultString = JSON.stringify({
+                    type: "FeatureCollection",
+                    features: uniquePolyFeatures.filter(f => f.geometry.type !== "Point") // Point以外をフィルタ
+                }, null, 2);
+
+                outputPolyArea.value = polyResultString;
+
+                // --- D. 結果表示 ---
+                statusDiv.textContent = `✅ 処理完了: \n` + 
+                                        `  📍 ピン (Point): ${pinFiles.length}ファイルから ${totalPinCount}件 → ユニーク ${uniquePinCount}件 (重複削除: ${totalPinCount - uniquePinCount}件)\n` +
+                                        `  📐 ポリゴン他: ${polyFiles.length}ファイルから ${totalPolyCount}件 → ユニーク ${uniquePolyCount}件 (重複削除: ${totalPolyCount - uniquePolyCount}件)`;
+                statusDiv.className = "message success";
+                statusDiv.style.display = "block";
+                
+                if (uniquePinCount > 0) downloadPinBtn.style.display = "block";
+                if (uniquePolyCount > 0) downloadPolyBtn.style.display = "block";
+
+            } catch (error) {
+                statusDiv.textContent = "❌ エラー: " + error;
+                statusDiv.className = "message error";
+                statusDiv.style.display = "block";
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "ピンとポリゴンをそれぞれマージ・重複削除";
+            }
+        }
+
+        // 6. ダウンロード
+        function downloadResult(type) {
+            const resultString = type === 'pin' ? pinResultString : polyResultString;
+            const filename = type === 'pin' ? "merged_unique_points.geojson" : "merged_unique_poly.geojson";
+            
+            if (!resultString) return;
+
+            const blob = new Blob([resultString], { type: "application/geo+json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 初回実行時にファイルリストを更新
+        updateFileList('pin');
+        updateFileList('poly');
+    </script>
+</body>
+</html>
