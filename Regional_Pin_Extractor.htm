@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>GeoJSON地域別ピンファイル作成ツール</title>
+    <style>
+        /* CSSスタイルは以前のバージョンとほぼ同じです */
+        body { 
+            font-family: sans-serif; 
+            padding: 20px; 
+            background-color: #f4f7f6;
+        }
+        h1 { color: #2c3e50; }
+        h3 { color: #34495e; border-bottom: 2px solid #bdc3c7; padding-bottom: 5px; }
+        #file-input { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; background-color: #ecf0f1; border-radius: 5px; }
+        #address-selection { border: 1px solid #3498db; padding: 15px; margin-bottom: 20px; background-color: #eaf6ff; border-radius: 5px; }
+        .radio-container { 
+            max-height: 250px; 
+            overflow-y: auto; 
+            padding: 10px;
+            border: 1px dashed #a8c1d9;
+        }
+        .radio-container div { margin-bottom: 5px; }
+        input[type="radio"] { margin-right: 5px; }
+        
+        /* テーブルスタイル */
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px; 
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            text-align: left; 
+            font-size: 14px;
+        }
+        th { 
+            background-color: #3498db; 
+            color: white; 
+            position: sticky; top: 0; 
+        }
+        
+        /* ボタンとアラート */
+        button {
+            padding: 10px 15px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #27ad60;
+        }
+        .download-button {
+            background-color: #f39c12;
+            margin-top: 10px;
+            display: block;
+            width: fit-content;
+        }
+        .download-button:hover {
+            background-color: #e67e22;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ GeoJSON地域別ピンファイル作成</h1>
+    <p>GeoJSONファイル (`.geojson`, `.json`) を複数選択してアップロードし、処理ボタンを押してください。</p>
+
+    <div id="file-input">
+        <input type="file" id="geojsonFileInput" accept=".geojson,.json" multiple>
+        <button onclick="processFiles()">ファイルを処理</button>
+    </div>
+
+    <div id="address-selection">
+        <h3>地域選択 (加工済み住所)</h3>
+        <p>※ファイルを処理後、ここに地域リストが表示されます。ラジオボタンをクリックすると下の表が更新されます。</p>
+        <div id="radioButtonsContainer" class="radio-container">
+            </div>
+    </div>
+
+    <div id="result-area">
+        <h3>選択した地域のデータ</h3>
+        <p id="selectedAddressText">選択された地域：なし</p>
+        <button class="download-button" onclick="downloadGeoJson()" disabled id="downloadButton">
+            選択データを GeoJSON でダウンロード
+        </button>
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table id="dataTable">
+                </table>
+        </div>
+    </div>
+
+    <script>
+        // JavaScriptコード
+        
+        // グローバル変数として全フィーチャを保持する配列
+        let allUniqueFeatures = [];
+        // 住所加工後のキーと元のフィーチャリストを紐づけるマップ
+        let groupedFeatures = new Map();
+
+        // 複数のGeoJSONファイルを読み込み、結合・処理する関数
+        function processFiles() {
+            const input = document.getElementById('geojsonFileInput');
+            const files = input.files;
+            if (files.length === 0) {
+                alert('ファイルを一つ以上選択してください。');
+                return;
+            }
+
+            // 処理前の初期化
+            allUniqueFeatures = [];
+            groupedFeatures.clear();
+            document.getElementById('radioButtonsContainer').innerHTML = '<p>データを読み込み中...</p>';
+            document.getElementById('downloadButton').disabled = true;
+            displayFilteredData(null);
+
+            const filePromises = [];
+            let combinedFeatures = [];
+
+            // FileReaderを使って各ファイルを読み込み、JSONとしてパースする
+            Array.from(files).forEach(file => {
+                filePromises.push(new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const json = JSON.parse(e.target.result);
+                            // GeoJSON FeatureCollectionのfeatures配列を抽出
+                            if (json.type === 'FeatureCollection' && Array.isArray(json.features)) {
+                                combinedFeatures.push(...json.features);
+                            } else if (json.type === 'Feature') {
+                                // Feature単体の場合は配列に追加
+                                combinedFeatures.push(json);
+                            } else {
+                                console.warn(`Skipping file ${file.name}: Not a valid GeoJSON FeatureCollection or Feature.`);
+                            }
+                            resolve();
+                        } catch(error) {
+                            console.error(`Error parsing GeoJSON file ${file.name}:`, error);
+                            reject(error);
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsText(file); // GeoJSONは通常UTF-8
+                }));
+            });
+
+            // 全ファイルの読み込みが完了したら、ユニーク化とグルーピングを行う
+            Promise.all(filePromises)
+                .then(() => {
+                    if (combinedFeatures.length === 0) {
+                        alert('ファイルから有効なGeoJSONフィーチャが読み込まれませんでした。');
+                        document.getElementById('radioButtonsContainer').innerHTML = '<p>データなし</p>';
+                        return;
+                    }
+                    
+                    // 💡 1. 重複データのユニーク化
+                    const uniqueFeaturesMap = new Map();
+                    combinedFeatures.forEach(feature => {
+                        // 重複チェックは geometry + properties全体 のJSON文字列で行います
+                        const key = JSON.stringify({ geometry: feature.geometry, properties: feature.properties }); 
+                        if (!uniqueFeaturesMap.has(key)) {
+                            uniqueFeaturesMap.set(key, feature);
+                        }
+                    });
+                    allUniqueFeatures = Array.from(uniqueFeaturesMap.values());
+                    
+                    // 💡 2. 住所の加工とグルーピング
+                    allUniqueFeatures.forEach(feature => {
+                        // propertiesからAddress列を探す (大文字小文字は厳密に)
+                        const address = feature.properties ? feature.properties.Address : null;
+                        
+                        if (address && address !== "") { 
+                            const cleanAddress = cleanAddressString(address);
+                            
+                            // 加工後の住所をキーとしてフィーチャを格納
+                            if (!groupedFeatures.has(cleanAddress)) {
+                                groupedFeatures.set(cleanAddress, []);
+                            }
+                            groupedFeatures.get(cleanAddress).push(feature);
+                        }
+                    });
+
+                    // 💡 3. ラジオボタンの生成
+                    const uniqueAddresses = Array.from(groupedFeatures.keys());
+                    renderRadioButtons(uniqueAddresses);
+                    
+                    // 最初の住所を自動選択して表示
+                    if (uniqueAddresses.length > 0) {
+                         const firstAddress = uniqueAddresses[0];
+                         displayFilteredData(firstAddress);
+                         // 最初のラジオボタンをチェック状態にする
+                         const firstRadio = document.querySelector('.radio-container input[type="radio"]');
+                         if(firstRadio) firstRadio.checked = true;
+                         document.getElementById('downloadButton').disabled = false;
+                    } else {
+                         displayFilteredData(null);
+                    }
+                    
+                    alert(`✅ GeoJSON処理完了: 合計 ${combinedFeatures.length} フィーチャから、ユニークデータ ${allUniqueFeatures.length} 件を処理し、${uniqueAddresses.length} 個の地域に分類しました。`);
+                })
+                .catch(error => {
+                    console.error('ファイル処理中にエラーが発生しました:', error);
+                    alert('ファイルの処理に失敗しました。詳細をコンソールで確認してください。');
+                });
+        }
+
+        // 住所文字列から数値とハイフンを削除する関数
+        function cleanAddressString(address) {
+            return address.replace(/[0-9-]+/g, '').trim(); 
+        }
+
+        // ユニークな住所リストからラジオボタンを生成する関数
+        function renderRadioButtons(addresses) {
+            const container = document.getElementById('radioButtonsContainer');
+            container.innerHTML = ''; 
+
+            if (addresses.length === 0) {
+                container.innerHTML = '<p>ユニークな地域が見つかりませんでした。「Address」プロパティがあるか確認してください。</p>';
+                return;
+            }
+
+            addresses.forEach((address, index) => {
+                const div = document.createElement('div');
+                const radioId = `addr_${index}`;
+                
+                div.innerHTML = `
+                    <input type="radio" id="${radioId}" name="cleanAddress" value="${address}" 
+                           onclick="displayFilteredData(this.value)">
+                    <label for="${radioId}">${address} (${groupedFeatures.get(address).length} 件)</label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // 選択された住所に基づいてデータをフィルタリングし、表に出力する関数
+        let currentSelectedFeatures = []; // ダウンロード用に選択中のフィーチャを保持
+        
+        function displayFilteredData(selectedAddress) {
+            const table = document.getElementById('dataTable');
+            const selectedAddressText = document.getElementById('selectedAddressText');
+            table.innerHTML = ''; 
+            currentSelectedFeatures = []; // リセット
+            
+            if (!selectedAddress) {
+                selectedAddressText.textContent = '選択された地域：なし';
+                document.getElementById('downloadButton').disabled = true;
+                table.innerHTML = '<thead><tr><th>データなし</th></tr></thead><tbody></tbody>';
+                return;
+            }
+
+            selectedAddressText.textContent = `選択された地域：${selectedAddress}`;
+            const filteredData = groupedFeatures.get(selectedAddress) || [];
+            currentSelectedFeatures = filteredData; // ダウンロード用データに設定
+            
+            if (filteredData.length === 0) {
+                document.getElementById('downloadButton').disabled = true;
+                table.innerHTML = '<thead><tr><th>データなし</th></tr></thead><tbody><tr><td>選択された地域に該当するデータがありません。</td></tr></tbody>';
+                return;
+            }
+            
+            document.getElementById('downloadButton').disabled = false;
+            
+            // テーブル表示用の処理 (GeoJSON propertiesを展開)
+            
+            // ヘッダー行を作成: propertiesのキー + Geometry (緯度/経度)
+            const firstProps = filteredData[0].properties || {};
+            let headers = Object.keys(firstProps);
+            // 緯度経度をプロパティに追加 (テーブル表示用)
+            if(filteredData[0].geometry && filteredData[0].geometry.coordinates) {
+                 headers = [...headers, 'Longitude', 'Latitude'];
+            }
+
+            const thead = table.createTHead();
+            let headerRow = thead.insertRow();
+            headers.forEach(header => {
+                let th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            
+            // データ行を作成
+            const tbody = table.createTBody();
+            filteredData.forEach(feature => {
+                let tr = tbody.insertRow();
+                const props = feature.properties || {};
+                const coords = feature.geometry && feature.geometry.coordinates;
+
+                headers.forEach(header => {
+                    let td = tr.insertCell();
+                    if (header === 'Longitude' && coords) {
+                        td.textContent = coords[0]; // 経度
+                    } else if (header === 'Latitude' && coords) {
+                        td.textContent = coords[1]; // 緯度
+                    } else {
+                        td.textContent = props[header] || ''; // プロパティの値
+                    }
+                });
+            });
+        }
+        
+        // 💡 4. 選択されたフィーチャをGeoJSONファイルとしてダウンロードする関数
+        function downloadGeoJson() {
+            if (currentSelectedFeatures.length === 0) {
+                alert('ダウンロードするデータが選択されていません。');
+                return;
+            }
+
+            // FeatureCollection形式のGeoJSONを作成
+            const geoJsonOutput = {
+                type: "FeatureCollection",
+                features: currentSelectedFeatures
+            };
+
+            const dataStr = JSON.stringify(geoJsonOutput, null, 2); // 整形して文字列化
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            
+            const selectedAddress = document.getElementById('selectedAddressText').textContent.replace('選択された地域：', '').trim();
+            const filename = `filtered_${selectedAddress || 'data'}_${Date.now()}.geojson`;
+            
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

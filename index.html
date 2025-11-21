@@ -1,60 +1,199 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ALmap メインページ</title>
+    <meta name="discription" content="eMAFF農地データを活用する">
+    <meta name="auther" content="澤田泰人">
+    <meta name="date" content="2025年11月20日">
+ 　 <meta charset="UTF-8">
+　　<meta name="robots" content="noindex">
+  <title>eMAFF農地データツール 一覧</title>
   <style>
     body {
       font-family: sans-serif;
-      text-align: center;
-      margin-top: 50px;
+      padding: 2em;
+      background-color: #f9f9f9;
     }
-    select {
-      font-size: 18px;
-      padding: 6px;
-      margin: 10px;
+    h1 {
+      color: #333;
     }
-    button {
-      font-size: 18px;
-      padding: 8px 16px;
-      margin-top: 10px;
-      background: #1565c0;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    li {
+      background: #fff;
+      margin: 1em 0;
+      padding: 1em;
+      border-left: 5px solid #4CAF50;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    a {
+      font-weight: bold;
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .description {
+      margin-top: 0.5em;
+      color: #555;
+    }
+
+    .text {
+      margin-right: 10px; /* テキストと画像の間にスペースを作る */
+    }
+    .thumbnail {
+      width: 300px; /* サムネイル画像の幅を指定 */
+      height: auto; /* 高さは自動調整 */
+      cursor: pointer; /* クリック可能なマウスカーソル */
+    }
+
+    /* モーダルスタイル */
+    .modal {
+      display: none; /* 最初は非表示 */
+      position: fixed;
+      z-index: 1;
+      padding-top: 100px;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.8); /* 背景の色 */
+    }
+    .modal-content {
+      margin: auto;
+      display: block;
+      width: 80%; /* 拡大画像の大きさ */
+      max-width: 700px;
+    }
+    
+    .close {
+      position: absolute;
+      top: 15px;
+      right: 35px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      transition: 0.3s;
       cursor: pointer;
-    }
-    button:hover {
-      background: #0d47a1;
     }
   </style>
 </head>
 <body>
-  <h1>ALmap メインページ</h1>
-  <p>表示したい地図ファイルを選んでください。</p>
+  <button onclick="window.open('https://map.maff.go.jp/?dlgName=jusho', '_blank')">eMAFF農地ナビ
+  を開く</button>
+  <h1>eMAFF農地ナビデータツール 一覧</h1>
+  <ul>
+    <li>
+        <a href="ALmap.htm" target="_blank">農地表示</a>
+        <div class="description">農地のポリゴンとピンを表示します。</div>
+        <!--
+        <img src="images/weather-progressT.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+        <img src="images/weather-progressR.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+        <img src="images/weather-progressS.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+        -->
+    </li>
+　　 <li>
+        <a href="Pin_Data_Merger.htm.htm" target="_blank">ピン（ほ場情報）データの結合</a>
+        <div class="description">ピンのgeojsonファイルを結合します。</div>
 
-  <!-- ✅ 選択メニュー -->
-  <select id="mapSelect">
-    <option value="ALmap2.htm">ALmap2</option>
- 
-    <option value="PinGeojson2CSV(UTF8).htm">PinGeojson2CSV(UTF8)</option>
+    </li>
+    <li>
+        <a href="Polygon_Data_Merger.htm" target="_blank">ポリゴン（ほ場の輪郭）データの結合</a>
+        <div class="description">ポリゴンのgeojsonファイルを結合します。</div>
 
-    <option value="PinCSV(SJIS)2Geojson.htm">PinCSV(SJIS)2Geojso</option>
+    </li>
+　　 <li>
+        <a href="Pin_Polygon_Matcher.htm" class="text" target="_blank">ピンとポリゴンの照合</a>
+        <div class="description">ピンとポリゴンの照合して対応するピンとポリゴンを出力します。</div>
 
+    </li>  
+    <li>
+        <a href="Regional_Pin_Extractor.htm" class="text" target="_blank">地域指定ピン</a>
+        <div class="description">前年と本年の比較など二期の有効データの積算値をグラフにします。</div>
+
+    </li>
+    <li>
+      <a href="visualize-weather-effective-data.htm" target="_blank">日別値　気象データ・有効データの可視化</a>
+      <div class="description">気象データの日別値を用いて農作物の生育の有効データをグラフにします。</div>
+
+    </li>
+    <li>
+      <a href="visualize-and-aggregate-normal-values.htm" target="_blank">日別値　気象データ・有効データの可視化に平年値の集計を追加</a>
+      <div class="description">気象データの日別値を用いて農作物の生育の有効データをグラフにします。また、平年値を用いた農作物の生育に有効な数値を表にします。</div>
+
+    </li>
+    <li>
+        <a href="hourly-weather-effective-visual.htm" target="_blank">時別値　気象データ・有効データの可視化</a>
+        <div class="description">気象データの時別値を用いて農作物の生育の有効データをグラフにします。</div>
+
+      </li>
+    <li>
+      <a href="annual-variation-weather-effective.htm" target="_blank">日別値　気象データ・有効データの年次変動</a>
+      <div class="description">気象データの日別値を用いて農作物の生育の有効データの年次変動をグラフにします。</div>
+
+    </li>
+    <li>
+      <a href="annual-variation-effective-reach.htm" target="_blank">日別値　積算温度到達日の年次変動</a>
+      <div class="description">気象データの日別値を用いて農作物の生育の有効データの年次変動をグラフにします。</div>
+
+    </li>
     
-    <option value="Polygon_GeoJSON ↔ CSV 相互変換ツール.htm">Polygon_GeoJSON ↔ CSV 相互変換ツール</option>
-    <option value="Pin_GeoJSON ↔ CSV 相互変換ツール.htm">Pin_GeoJSON ↔ CSV 相互変換ツール</option>
-  </select>
+   <li>
+      <a href="nightlength_izumo.htm" target="_blank">天文API　夜間長の可視化(出雲)</a>
+      <div class="description">長日、短日にかかわる夜間長を表とグラフにします。</div>
 
-  <!-- ✅ 開くボタン -->
-  <button onclick="openMap()">開く</button>
+    </li>       
+       <li>
+      <!-- a href="nightlength_izumoFetch.htm" target="_blank">昼間長と夜間長の可視化（出雲）</a-->
+      <a href="nightlength_izumoCSV.htm" target="_blank">昼間長と夜間長の可視化（出雲）</a>
+      <div class="description">長日、短日にかかわる昼間長と夜間長を表とグラフにします。</div>
 
+      
+    </li>  
+      
+    <li>
+        <a href="import-weather-data-guide.htm" target="_blank">気象データ取り込み説明</a>
+        <div class="description">気象庁のサイトから気象データを取り込む手順を説明します。</div>
+
+      </li>
+    <li>
+      <a href="add-daily-data.htm" target="_blank">日別値　追加</a>
+      <div class="description">気象データの日別値を追加できます。</div>
+
+    </li>
+    <li>
+      <a href="add-hourly-data.htm" target="_blank">時別値　追加</a>
+      <div class="description">気象データの時別値を追加できます。</div>
+
+  </li>
+      
+  </ul>
+  <div id="myModal" class="modal">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <img class="modal-content" id="img01">
+  </div>
   <script>
-    function openMap() {
-      const selectedFile = document.getElementById("mapSelect").value;
-      // 同じフォルダ内のファイルを開く
-      window.location.href = selectedFile;
+    function openModal(img) {
+      const modal = document.getElementById("myModal");
+      const modalImg = document.getElementById("img01");
+      modal.style.display = "block";
+      modalImg.src = img.src;
+    }
+
+    function closeModal() {
+      const modal = document.getElementById("myModal");
+      modal.style.display = "none";
+    }
+
+    // モーダル外をクリックしたときにモーダルを閉じる
+    window.onclick = function(event) {
+      const modal = document.getElementById("myModal");
+      if (event.target === modal) {
+        closeModal();
+      }
     }
   </script>
 </body>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin (Point) GeoJSON マージ & 重複削除ツール</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        h1 {
+            color: #d35400; /* ピンっぽい色（オレンジ/赤系）に変更 */
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .step {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .step:last-child {
+            border-bottom: none;
+        }
+        h2 {
+            font-size: 1.2em;
+            color: #e67e22; /* ピンっぽい色 */
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #fafafa;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="file"]:hover {
+            border-color: #e67e22;
+            background: #fffdfa;
+        }
+        button {
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #d35400;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        textarea {
+            width: 100%;
+            height: 250px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .stats {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        #fileList {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+            font-size: 0.9em;
+            color: #555;
+        }
+        #fileList li {
+            margin-bottom: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Pin (Point) GeoJSON マージ & ユニーク化</h1>
+        <p>複数のピン(Point) GeoJSONファイルを読み込み、結合して重複を除去します。</p>
+
+        <div class="step">
+            <h2>1. ファイル選択 (複数可)</h2>
+            <label for="files">GeoJSONファイル (.json, .geojson):</label>
+            <p class="stats" style="margin-bottom: 5px;">※ ShiftキーやCtrlキーを押しながら複数のファイルを選択してください。</p>
+            <input type="file" id="files" accept=".json,.geojson" multiple onchange="updateFileList()">
+            <ul id="fileList"></ul>
+        </div>
+
+        <div class="step">
+            <h2>2. 処理実行</h2>
+            <p class="stats">※「緯度経度」と「属性(プロパティ)」の両方が完全に一致するピンを同一とみなします。</p>
+            <button onclick="processFiles()" id="processBtn">マージして重複削除</button>
+            <div id="statusMessage" class="message"></div>
+        </div>
+
+        <div class="step">
+            <h2>3. 結果出力</h2>
+            <textarea id="outputArea" readonly placeholder="ここに処理結果が表示されます..."></textarea>
+            <button onclick="downloadResult()" id="downloadBtn" style="display:none; background-color: #28a745; margin-top: 10px;">ダウンロード (merged_unique_points.geojson)</button>
+        </div>
+    </div>
+
+    <script>
+        let mergedResultString = "";
+
+        function updateFileList() {
+            const input = document.getElementById('files');
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            
+            if (input.files.length > 0) {
+                for (let i = 0; i < input.files.length; i++) {
+                    const li = document.createElement('li');
+                    li.textContent = `📍 ${input.files[i].name}`;
+                    list.appendChild(li);
+                }
+            }
+        }
+
+        // プロパティの順番が違っても同じデータとして扱うための正規化文字列変換
+        function consistentStringify(obj) {
+            if (obj === null || typeof obj !== 'object') {
+                return JSON.stringify(obj);
+            }
+            
+            if (Array.isArray(obj)) {
+                return '[' + obj.map(item => consistentStringify(item)).join(',') + ']';
+            }
+            
+            const sortedKeys = Object.keys(obj).sort();
+            const parts = sortedKeys.map(key => {
+                return JSON.stringify(key) + ':' + consistentStringify(obj[key]);
+            });
+            return '{' + parts.join(',') + '}';
+        }
+
+        async function processFiles() {
+            const input = document.getElementById('files');
+            const statusDiv = document.getElementById('statusMessage');
+            const outputArea = document.getElementById('outputArea');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const processBtn = document.getElementById('processBtn');
+
+            if (input.files.length === 0) {
+                alert("ファイルを選択してください。");
+                return;
+            }
+
+            processBtn.disabled = true;
+            processBtn.textContent = "処理中...";
+            statusDiv.style.display = 'none';
+            outputArea.value = "";
+
+            try {
+                const files = Array.from(input.files);
+                let allFeatures = [];
+
+                // ファイル読み込み
+                const filePromises = files.map(file => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => {
+                            try {
+                                const json = JSON.parse(e.target.result);
+                                resolve(json);
+                            } catch (err) {
+                                reject(`ファイル「${file.name}」は有効なJSONではありません。`);
+                            }
+                        };
+                        reader.onerror = () => reject(`ファイル「${file.name}」の読み込みに失敗しました。`);
+                        reader.readAsText(file);
+                    });
+                });
+
+                const results = await Promise.all(filePromises);
+
+                // Featureの収集
+                results.forEach(data => {
+                    if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+                        allFeatures = allFeatures.concat(data.features);
+                    } else if (data.type === "Feature") {
+                        allFeatures.push(data);
+                    }
+                });
+
+                const totalCount = allFeatures.length;
+                
+                // ユニーク化処理
+                const uniqueFeatures = [];
+                const seenSignatures = new Set();
+
+                allFeatures.forEach(feature => {
+                    // ピンの場合、geometryはPoint(coordinates)
+                    const geomStr = consistentStringify(feature.geometry);
+                    const propStr = consistentStringify(feature.properties);
+                    
+                    // 座標と属性の両方をキーにして重複チェック
+                    const signature = `${geomStr}|${propStr}`;
+
+                    if (!seenSignatures.has(signature)) {
+                        seenSignatures.add(signature);
+                        uniqueFeatures.push(feature);
+                    }
+                });
+
+                const uniqueCount = uniqueFeatures.length;
+                const removedCount = totalCount - uniqueCount;
+
+                const resultGeoJSON = {
+                    type: "FeatureCollection",
+                    features: uniqueFeatures
+                };
+
+                mergedResultString = JSON.stringify(resultGeoJSON, null, 2);
+                outputArea.value = mergedResultString;
+                
+                statusDiv.textContent = `完了: ${files.length}ファイルを結合しました。\n` + 
+                                      `合計ピン数: ${totalCount} → 結果: ${uniqueCount} (重複削除: ${removedCount})`;
+                statusDiv.className = "message success";
+                statusDiv.style.display = "block";
+                downloadBtn.style.display = "block";
+
+            } catch (error) {
+                statusDiv.textContent = "エラー: " + error;
+                statusDiv.className = "message error";
+                statusDiv.style.display = "block";
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "マージして重複削除";
+            }
+        }
+
+        function downloadResult() {
+            if (!mergedResultString) return;
+
+            const blob = new Blob([mergedResultString], { type: "application/geo+json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "merged_unique_points.geojson";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
