@@ -180,6 +180,7 @@
   <script>
 let selectedFeatures = [];
 let loadedFileNames = [];
+let map; 
 
 const propertyLabels = {
   FarmCommitteeCd: "農業委員会コード",
@@ -208,7 +209,7 @@ const propertyLabels = {
   UsageSituationInvestigationResult: "遊休農地コード",
   UseIntentionInvestigationDate: "利用意向調査日",
   OwnerStatementIntentSurveyResultsCodeName: "遊休農地の所有者等の意向",
-  OwnerStatementIntentSurveyResults: "遊休農地の所有者等の意向コード",
+  OwnerStatementIntentSurveyResults: "遊休農地コード",
   UseIntentionAscertainmentResultCodeName: "所有者等の確知の状況",
   UseIntentionAscertainmentResult: "所有者等の確知コード",
   PublicNoticeDate: "公告日",
@@ -224,7 +225,7 @@ const propertyLabels = {
   daicho_shubetsu_cd: "台帳種別コード"
 };
 
-// --- 色定義（ユーザー修正版） ---
+// --- 色定義 ---
 const cropColors = {
   "主食用きぬむすめ": "#90ee90",
   "主食用つや姫": "#ffc0cb",
@@ -246,7 +247,7 @@ const cropColors = {
   "その他": "#bdbdbd"
 };
 
-// 凡例の表示順（必要に応じて調整）
+// 凡例の表示順
 const cropOrder = [
   "主食用きぬむすめ","主食用つや姫","主食用つきあかり","主食用コシヒカリ",
   "稲WCS用きぬむすめ","稲WCS用つきはやか","稲WCS用たちすずか","稲WCS用ヒメノモチ",
@@ -258,31 +259,32 @@ function isHatchedCrop(cropName) {
   return n && (n.includes("飼料用") || n.includes("WCS用"));
 }
 
-// 全角/半角空白と前後空白を除去して正規化
 function normalizeCrop(name) {
   if (!name && name !== "") return name;
   return String(name).replace(/\u3000/g, " ").replace(/\s+/g, "").trim();
 }
 
+// ★修正箇所★ 警告を出さないように変更
 function getBaseCropNameForHatching(cropName) {
-  const inputRaw = cropName;
   const crop = normalizeCrop(cropName);
-  console.log("[getBaseCropNameForHatching] input:", JSON.stringify(inputRaw), "normalized:", JSON.stringify(crop));
 
   if (crop && crop.startsWith("稲WCS用")) {
-    const variety = crop.replace("稲WCS用", ""); // 例: "きぬむすめ"
+    const variety = crop.replace("稲WCS用", "");
     const candidate = `主食用${variety}`;
-    const exists = !!cropColors[candidate];
-    console.log("  candidate:", candidate, "exists:", exists);
-    if (exists) return candidate;
-    console.warn(`  主食用${variety} が cropColors にありません（${crop} は「その他」色にフォールバック）`);
+    
+    // 主食用が存在すれば、その色をベース（ハッチング背景）にする
+    if (cropColors[candidate]) {
+        return candidate;
+    }
+    // 主食用が存在しない場合（たちすずか等）は、警告を出さずに
+    // そのままの名前を返す（cropColorsにWCS用の定義があるため）
   }
-  const existsOrig = !!cropColors[crop];
-  console.log("  fallback:", crop, "exists:", existsOrig);
   return crop;
 }
 
 function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
+  if (!mapInstance) return;
+
   const renderer = mapInstance.getRenderer(mapInstance);
   if (!renderer || !renderer._container) return;
   const svg = renderer._container;
@@ -335,17 +337,21 @@ function getPolygonRenderStyle(cropName, isSelected = false) {
   }
 
   const n = normalizeCrop(cropName);
-  if (n === null || n === undefined) {
+  if (n === null || n === undefined || n === "") {
     currentFill = "transparent";
     currentFillOpacity = "0.0";
   } else if (isHatchedCrop(n)) {
     const baseCropName = getBaseCropNameForHatching(n);
     const hatchBackgroundColor = cropColors[baseCropName] || cropColors["その他"] || "#e88";
-    const uniqueHatchPatternId =
-      `hatch-${baseCropName.replace(/[^a-zA-Z0-9\u3040-\u30FF\u4E00-\u9FAF]/g, '-')}-${map._leaflet_id}`;
-
-    injectSvgHatchPattern(map, uniqueHatchPatternId, hatchBackgroundColor);
-    currentFill = `url(#${uniqueHatchPatternId})`;
+    
+    if (map) {
+      const uniqueHatchPatternId =
+        `hatch-${baseCropName.replace(/[^a-zA-Z0-9\u3040-\u30FF\u4E00-\u9FAF]/g, '-')}-${map._leaflet_id}`;
+      injectSvgHatchPattern(map, uniqueHatchPatternId, hatchBackgroundColor);
+      currentFill = `url(#${uniqueHatchPatternId})`;
+    } else {
+      currentFill = hatchBackgroundColor;
+    }
   } else {
     currentFill = cropColors[n] || cropColors["その他"] || "#e88";
   }
@@ -377,23 +383,25 @@ function createCropLegend(crops) {
 function getSelectedCrop() {
   const checked = document.querySelector('input[name="crop"]:checked');
   if (!checked) return null;
-  // 全角空白→半角→空白削除→trim
   const v = checked.value.replace(/\u3000/g, " ").replace(/\s+/g, "").trim();
   return v;
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-  // ベースレイヤー
+
   const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
   const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles © Esri" });
 
-  // SVG レンダラーを強制
-  window.map = L.map("map", {
+  map = L.map("map", { 
     center: [35.404, 132.825],
     zoom: 17,
     layers: [osm],
     renderer: L.svg()
   });
+
+  setTimeout(function() {
+    map.invalidateSize();
+  }, 100);
 
   window.polygonLayerGroup = L.layerGroup().addTo(map);
   const markerLayerGroup  = L.layerGroup().addTo(map);
@@ -403,13 +411,11 @@ document.addEventListener("DOMContentLoaded", function() {
   const overlayMaps = { "筆ポリゴン": polygonLayerGroup, "農地ピン": markerLayerGroup, "地番ラベル": tibanLayerGroup };
   L.control.layers(baseMaps, overlayMaps).addTo(map);
 
-  // UI 初期化
   map.doubleClickZoom.disable();
   document.getElementById("infoToggle").addEventListener("click", function() {
     document.getElementById("infoPanel").classList.toggle("open");
   });
 
-  // リサイズ
   const panel = document.getElementById("infoPanel");
   const resizer = document.getElementById("infoResizer");
   let isResizing = false;
@@ -441,10 +447,8 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // 凡例（順序明示）
   createCropLegend(cropOrder);
 
-  // ファイル読み込み
   document.getElementById("fileInput").addEventListener("change", function(event) {
     const files = event.target.files;
     if (files.length === 0) { updateLoadedFileNamesDisplay(); return; }
@@ -499,7 +503,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 });
               }
 
-              // 地番ラベル
+              // 筆ポリゴンの地番ラベル
               let coords;
               if (feature.geometry.type === "Polygon" && feature.geometry.coordinates.length > 0) {
                 coords = feature.geometry.coordinates[0][0];
@@ -507,22 +511,23 @@ document.addEventListener("DOMContentLoaded", function() {
                 coords = feature.geometry.coordinates[0][0][0];
               }
               if (coords) {
-                const tibanLabel = L.marker([coords[1], coords[0]], {
-                  icon: L.divIcon({
-                    className: "tiban-label",
-                    html: String(feature.properties?.Tiban || ""),
-                    iconSize: null
-                  }),
-                  interactive: false
-                });
-                tibanLayerGroup.addLayer(tibanLabel);
+                const tibanLabelText = String(feature.properties?.Tiban || "");
+                if (tibanLabelText.trim() !== "") {
+                  const tibanLabel = L.marker([coords[1], coords[0]], {
+                    icon: L.divIcon({
+                      className: "tiban-label",
+                      html: tibanLabelText,
+                      iconSize: null
+                    }),
+                    interactive: false
+                  });
+                  tibanLayerGroup.addLayer(tibanLabel);
+                }
               }
 
-              // クリック
               lyr.on("click", function(e) {
                 L.DomEvent.stopPropagation(e);
                 const crop = getSelectedCrop();
-                console.log("[click] selected crop (normalized):", crop, "svg-path-exists:", !!lyr._path);
 
                 const idx = selectedFeatures.findIndex(sel => sel.lyr === lyr);
 
@@ -534,14 +539,12 @@ document.addEventListener("DOMContentLoaded", function() {
                   if (crop) {
                     feature.properties.SelectedCrop = crop;
                     const selectedStyle = getPolygonRenderStyle(crop, true);
-                    console.log("[click] selectedStyle:", selectedStyle);
 
                     if (lyr._path) {
                       lyr._path.setAttribute('fill', selectedStyle.fill);
                       lyr._path.setAttribute('fill-opacity', selectedStyle.fillOpacity);
                       lyr._path.setAttribute('stroke', selectedStyle.stroke);
                       lyr._path.setAttribute('stroke-width', selectedStyle.strokeWidth);
-                      console.log("[click] applied fill:", lyr._path.getAttribute('fill'));
                     } else {
                       const baseCropName = getBaseCropNameForHatching(crop);
                       const fillColorForCanvas = (selectedStyle.fill === "transparent")
@@ -595,11 +598,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 showSelectedFeatureProperties();
               });
 
-              if (feature.properties && feature.properties.Tiban) {
+              const tibanLabelText = String(feature.properties?.Tiban || "");
+              if (tibanLabelText.trim() !== "") {
                 const tibanLabel = L.marker(latlng, {
                   icon: L.divIcon({
                     className: "tiban-label",
-                    html: String(feature.properties.Tiban),
+                    html: tibanLabelText,
                     iconSize: null
                   }),
                   interactive: false
@@ -624,7 +628,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 
-  // 保存ボタン
   document.getElementById('outbtn').addEventListener('click', async function() {
     const geojson = polygonLayerGroup.toGeoJSON();
     const dataToSave = JSON.stringify(geojson, null, 2);
@@ -669,7 +672,6 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 
-// 補助関数
 function updateLoadedFileNamesDisplay() {
   const displayElement = document.getElementById("loadedFileNamesDisplay");
   if (!displayElement) return;
