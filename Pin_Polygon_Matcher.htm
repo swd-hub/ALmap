@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoJSON 相互対応データ抽出ツール</title>
+    <title>GeoJSON 座標による空間抽出ツール</title>
     <style>
         body {
             font-family: "Helvetica Neue", Arial, sans-serif;
@@ -14,6 +14,8 @@
         h1 {
             color: #17a2b8;
             text-align: center;
+            border-bottom: 3px solid #17a2b8;
+            padding-bottom: 10px;
         }
         .container {
             max-width: 1000px;
@@ -47,7 +49,7 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
-        input[type="file"], input[type="text"] {
+        input[type="file"] {
             width: 100%;
             padding: 8px;
             border: 1px solid #ccc;
@@ -99,6 +101,7 @@
             padding: 15px;
             border-radius: 4px;
             display: none;
+            white-space: pre-wrap;
         }
         .success {
             background-color: #d4edda;
@@ -115,40 +118,36 @@
 <body>
 
     <div class="container">
-        <h1>GeoJSON 相互対応データ抽出ツール</h1>
-        <p>ピンデータとポリゴンデータの属性を照合し、**共通のキーを持つ**フィーチャーだけを抽出して出力します。</p>
+        <h1>GeoJSON 座標による空間抽出ツール (BBoxフィルター)</h1>
+        <p>📍 ピン (Point) データの全座標から四角形の範囲 (BBox) を計算し、その範囲と交差する 🗺️ ポリゴン (Polygon) データを抽出します。</p>
 
         <div class="input-section">
             
             <div class="input-group" style="background-color: #f8f9fa;">
-                <h2>📍 ピン (Point) データ</h2>
+                <h2>📍 ピン (Point) データ (検索範囲を定義)</h2>
                 <label for="pinFile">GeoJSONファイル (.geojson, .json):</label>
                 <input type="file" id="pinFile" accept=".json,.geojson">
-                <label for="pinKey">照合キー名 (例: city_code):</label>
-                <input type="text" id="pinKey" placeholder="属性キーを入力してください" value="id">
             </div>
 
             <div class="input-group" style="background-color: #f8f9fa;">
-                <h2>🗺️ ポリゴン (Polygon) データ</h2>
+                <h2>🗺️ ポリゴン (Polygon) データ (抽出対象)</h2>
                 <label for="polyFile">GeoJSONファイル (.geojson, .json):</label>
                 <input type="file" id="polyFile" accept=".json,.geojson">
-                <label for="polyKey">照合キー名 (例: code):</label>
-                <input type="text" id="polyKey" placeholder="属性キーを入力してください" value="id">
             </div>
             
         </div>
         
-        <button onclick="matchFeatures()" id="processBtn">照合して対応データを出力</button>
+        <button onclick="matchFeatures()" id="processBtn">座標で抽出して対応データを出力</button>
         <div id="statusMessage" class="message"></div>
         
         <div class="output-section">
             <div class="output-box">
-                <h2>出力 1: 対応したピン GeoJSON</h2>
+                <h2>出力 1: 抽出に使用したピン GeoJSON</h2>
                 <textarea id="matchedPinsOutput" readonly placeholder="結果が表示されます..."></textarea>
                 <button onclick="downloadResult('pins')" id="downloadPinsBtn" style="display:none; background-color: #28a745;">ピンダウンロード</button>
             </div>
             <div class="output-box">
-                <h2>出力 2: 対応したポリゴン GeoJSON</h2>
+                <h2>出力 2: 抽出されたポリゴン GeoJSON</h2>
                 <textarea id="matchedPolygonsOutput" readonly placeholder="結果が表示されます..."></textarea>
                 <button onclick="downloadResult('polygons')" id="downloadPolygonsBtn" style="display:none; background-color: #28a745;">ポリゴンダウンロード</button>
             </div>
@@ -159,13 +158,22 @@
         let matchedPinsString = "";
         let matchedPolygonsString = "";
 
+        // -----------------------------------------------------------
+        // 1. ユーティリティ関数
+        // -----------------------------------------------------------
+
         // ファイルを非同期で読み込む汎用関数
         function readFileAsync(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = e => {
                     try {
-                        resolve(JSON.parse(e.target.result));
+                        const parsed = JSON.parse(e.target.result);
+                        if (typeof parsed !== 'object' || parsed === null) {
+                            reject(`ファイル「${file.name}」の内容が不正です。`);
+                            return;
+                        }
+                        resolve(parsed);
                     } catch (err) {
                         reject(`ファイル「${file.name}」は有効なGeoJSONではありません。`);
                     }
@@ -183,23 +191,88 @@
             statusDiv.style.display = "block";
         }
 
+        /**
+         * 複数のPointフィーチャーから、それらを包含するBBox [minLng, minLat, maxLng, maxLat] を計算する。
+         */
+        function calculatePinBBox(pinFeatures) {
+            let minLng = Infinity, maxLng = -Infinity;
+            let minLat = Infinity, maxLat = -Infinity;
+
+            pinFeatures.forEach(f => {
+                if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
+                    const [lng, lat] = f.geometry.coordinates;
+                    minLng = Math.min(minLng, lng);
+                    maxLng = Math.max(maxLng, lng);
+                    minLat = Math.min(minLat, lat);
+                    maxLat = Math.max(maxLat, lat);
+                }
+            });
+
+            if (minLng === Infinity) return null;
+            return [minLng, minLat, maxLng, maxLat];
+        }
+
+        /**
+         * Polygon/MultiPolygonフィーチャーから、そのフィーチャーを包含するBBoxを計算する。
+         * BBox: [minLng, minLat, maxLng, maxLat]
+         */
+        function getFeatureBBox(feature) {
+            let minLng = Infinity, maxLng = -Infinity;
+            let minLat = Infinity, maxLat = -Infinity;
+            
+            if (!feature.geometry || !feature.geometry.coordinates) return null;
+
+            const extractCoords = (coords) => {
+                // Polygon/LineString (coordinates: [ [lng, lat], ... ])
+                if (typeof coords[0][0] === 'number') { 
+                    coords.forEach(([lng, lat]) => {
+                        minLng = Math.min(minLng, lng);
+                        maxLng = Math.max(maxLng, lng);
+                        minLat = Math.min(minLat, lat);
+                        maxLat = Math.max(maxLat, lat);
+                    });
+                } 
+                // MultiPolygon/Polygon with holes (coordinates: [ [ [lng, lat], ... ], ... ])
+                else {
+                    coords.forEach(ring => extractCoords(ring));
+                }
+            };
+            
+            extractCoords(feature.geometry.coordinates);
+
+            if (minLng === Infinity) return null;
+            return [minLng, minLat, maxLng, maxLat];
+        }
+
+        /**
+         * 2つのBBoxが交差するかどうかを判定する。
+         * bbox: [minLng, minLat, maxLng, maxLat]
+         */
+        function checkBBoxIntersection(bbox1, bbox2) {
+            const [minLng1, minLat1, maxLng1, maxLat1] = bbox1;
+            const [minLng2, minLat2, maxLng2, maxLat2] = bbox2;
+
+            return maxLng1 >= minLng2 && 
+                   minLng1 <= maxLng2 &&
+                   maxLat1 >= minLat2 &&
+                   minLat1 <= maxLat2;
+        }
+
+        // -----------------------------------------------------------
+        // 2. メイン処理関数
+        // -----------------------------------------------------------
+
         async function matchFeatures() {
             const pinFileInput = document.getElementById('pinFile');
             const polyFileInput = document.getElementById('polyFile');
-            const pinKeyName = document.getElementById('pinKey').value.trim();
-            const polyKeyName = document.getElementById('polyKey').value.trim();
             const processBtn = document.getElementById('processBtn');
 
+            // 初期表示クリア
             document.getElementById('matchedPinsOutput').value = '';
             document.getElementById('matchedPolygonsOutput').value = '';
             document.getElementById('downloadPinsBtn').style.display = 'none';
             document.getElementById('downloadPolygonsBtn').style.display = 'none';
             document.getElementById('statusMessage').style.display = 'none';
-
-            if (!pinKeyName || !polyKeyName) {
-                showMsg('照合キー名を両方入力してください。', true);
-                return;
-            }
 
             if (pinFileInput.files.length === 0 || polyFileInput.files.length === 0) {
                 showMsg('ピンGeoJSONファイルとポリゴンGeoJSONファイルの両方を選択してください。', true);
@@ -207,62 +280,44 @@
             }
 
             processBtn.disabled = true;
-            processBtn.textContent = "照合中...";
+            processBtn.textContent = "座標照合中...";
 
             try {
                 // 1. ファイルの読み込みとパース
                 const pinData = await readFileAsync(pinFileInput.files[0]);
                 const polyData = await readFileAsync(polyFileInput.files[0]);
 
-                const pinFeatures = pinData.features || (pinData.type === 'Feature' ? [pinData] : []);
-                const polyFeatures = polyData.features || (polyData.type === 'Feature' ? [polyData] : []);
+                const pinFeatures = (pinData.features || (pinData.type === 'Feature' ? [pinData] : [])).filter(f => f.geometry && f.geometry.type === 'Point');
+                const polyFeatures = (polyData.features || (polyData.type === 'Feature' ? [polyData] : [])).filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
 
-                if (pinFeatures.length === 0 || polyFeatures.length === 0) {
-                    throw new Error("GeoJSONファイルにフィーチャー（Feature）が見つかりませんでした。");
+                if (pinFeatures.length === 0) {
+                    throw new Error("ピンGeoJSONファイルにPointフィーチャーが見つかりませんでした。");
+                }
+                if (polyFeatures.length === 0) {
+                    throw new Error("ポリゴンGeoJSONファイルにPolygonフィーチャーが見つかりませんでした。");
                 }
                 
-                // 2. 双方のキー値セットを作成
-                const pinKeyValues = new Set();
-                const polyKeyValues = new Set();
-                
-                pinFeatures.forEach(f => {
-                    const value = f.properties ? f.properties[pinKeyName] : undefined;
-                    if (value !== undefined) pinKeyValues.add(String(value));
-                });
-                
-                polyFeatures.forEach(f => {
-                    const value = f.properties ? f.properties[polyKeyName] : undefined;
-                    if (value !== undefined) polyKeyValues.add(String(value));
-                });
+                // 2. ピンのBBox（検索範囲）を計算
+                const pinBBox = calculatePinBBox(pinFeatures);
+                if (!pinBBox) {
+                     throw new Error("ピンフィーチャーから有効な座標を抽出できませんでした。");
+                }
 
-                // 3. 共通キー（Intersection）の抽出
-                const matchingKeys = new Set();
-                polyKeyValues.forEach(value => {
-                    if (pinKeyValues.has(value)) {
-                        matchingKeys.add(value);
+                // 3. ポリゴンのフィルタリング
+                const matchedPolygons = [];
+                polyFeatures.forEach(poly => {
+                    const polyBBox = getFeatureBBox(poly);
+                    
+                    if (polyBBox && checkBBoxIntersection(pinBBox, polyBBox)) {
+                        matchedPolygons.push(poly);
                     }
                 });
 
-                if (matchingKeys.size === 0) {
-                    showMsg('一致するキー値が一つも見つかりませんでした。キー名を確認してください。', true);
-                    return;
-                }
-
-                // 4. フィーチャーのフィルタリング
-                const matchedPins = pinFeatures.filter(f => {
-                    const value = f.properties ? f.properties[pinKeyName] : undefined;
-                    return value !== undefined && matchingKeys.has(String(value));
-                });
-                
-                const matchedPolygons = polyFeatures.filter(f => {
-                    const value = f.properties ? f.properties[polyKeyName] : undefined;
-                    return value !== undefined && matchingKeys.has(String(value));
-                });
-
-                // 5. 結果のGeoJSON構築と表示
-                const resultPins = { type: "FeatureCollection", features: matchedPins };
+                // 4. 結果のGeoJSON構築と表示
+                const resultPins = { type: "FeatureCollection", features: pinFeatures }; // 全ピンはそのまま出力 (検索範囲の定義として)
                 const resultPolygons = { type: "FeatureCollection", features: matchedPolygons };
 
+                // グローバル変数に結果を格納 (ダウンロード用)
                 matchedPinsString = JSON.stringify(resultPins, null, 2);
                 matchedPolygonsString = JSON.stringify(resultPolygons, null, 2);
                 
@@ -273,32 +328,39 @@
                 document.getElementById('downloadPolygonsBtn').style.display = 'block';
 
                 showMsg(
-                    `処理完了！\n` +
-                    `一致した共通キー数: ${matchingKeys.size}件\n` +
-                    `抽出されたピン数: ${matchedPins.length}件 / 抽出されたポリゴン数: ${matchedPolygons.length}件`
+                    `✅ 処理完了！ (座標抽出)\n` +
+                    `📌 検索範囲のBBox: 経度 ${pinBBox[0].toFixed(5)}～${pinBBox[2].toFixed(5)}, 緯度 ${pinBBox[1].toFixed(5)}～${pinBBox[3].toFixed(5)}\n` +
+                    `📍 抽出に使用したピン数: ${pinFeatures.length}件\n` +
+                    `📐 BBoxと交差したポリゴン数: ${matchedPolygons.length}件`
                 );
 
             } catch (error) {
-                showMsg('エラーが発生しました: ' + error, true);
+                console.error(error);
+                showMsg('❌ エラーが発生しました: \n' + error.message || String(error), true);
             } finally {
                 processBtn.disabled = false;
-                processBtn.textContent = "照合して対応データを出力";
+                processBtn.textContent = "座標で抽出して対応データを出力";
             }
         }
+
+        // -----------------------------------------------------------
+        // 3. ダウンロード関数
+        // -----------------------------------------------------------
 
         function downloadResult(type) {
             let jsonString, fileName;
             
             if (type === 'pins') {
                 jsonString = matchedPinsString;
-                fileName = "matched_pins.geojson";
+                fileName = "pin_search_area.geojson";
             } else if (type === 'polygons') {
                 jsonString = matchedPolygonsString;
-                fileName = "matched_polygons.geojson";
+                fileName = "matched_polygons_bbox.geojson";
             } else {
                 return;
             }
 
+            // ダウンロード処理
             const blob = new Blob([jsonString], { type: "application/geo+json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");

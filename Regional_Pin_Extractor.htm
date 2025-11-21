@@ -201,7 +201,7 @@
                          displayFilteredData(null);
                     }
                     
-                    alert(`✅ GeoJSON処理完了: 合計 ${combinedFeatures.length} フィーチャから、ユニークデータ ${allUniqueFeatures.length} 件を処理し、${uniqueAddresses.length} 個の地域に分類しました。`);
+                  //  alert(`✅ GeoJSON処理完了: 合計 ${combinedFeatures.length} フィーチャから、ユニークデータ ${allUniqueFeatures.length} 件を処理し、${uniqueAddresses.length} 個の地域に分類しました。`);
                 })
                 .catch(error => {
                     console.error('ファイル処理中にエラーが発生しました:', error);
@@ -210,9 +210,12 @@
         }
 
         // 住所文字列から数値とハイフンを削除する関数
-        function cleanAddressString(address) {
-            return address.replace(/[0-9-]+/g, '').trim(); 
-        }
+		function cleanAddressString(address) {
+		    let cleaned = address.replace(/\s*\(.*?\)\s*/g, '').trim(); // 半角括弧とその中身
+		    cleaned = cleaned.replace(/\s*（.*?）\s*/g, '').trim(); // 全角括弧とその中身
+		    cleaned = cleaned.replace(/[0-9０-９ー―-]+/g, '').trim();
+		    return cleaned;
+		}
 
         // ユニークな住所リストからラジオボタンを生成する関数
         function renderRadioButtons(addresses) {
