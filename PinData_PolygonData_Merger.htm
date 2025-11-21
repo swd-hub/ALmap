@@ -112,11 +112,11 @@
             margin-top: 5px;
         }
         .file-section {
-            display: flex;
-            gap: 20px;
+            display: block; /* 1列に変更 */
         }
         .file-input-group {
             flex: 1;
+            margin-bottom: 10px;
         }
         .file-list {
             list-style: none;
@@ -124,7 +124,7 @@
             margin: 10px 0;
             font-size: 0.9em;
             color: #555;
-            max-height: 100px;
+            max-height: 150px; /* リストの高さを調整 */
             overflow-y: auto;
             border: 1px solid #eee;
             padding: 5px;
@@ -159,35 +159,25 @@
 
     <div class="container">
         <h1>GeoJSON Pin & Polygon マージ・ユニーク化</h1>
-        <p>複数のGeoJSONファイルを読み込み、ピン（Point）とポリゴン（その他の形状）を分離し、それぞれを結合・重複削除して出力します。</p>
+        <p>GeoJSONファイルを読み込み、内部でピン（Point）とポリゴン（その他の形状）を分離し、それぞれを結合・重複削除して出力します。</p>
 
         <div class="step">
-            <h2>1. GeoJSONファイル選択 (共通)</h2>
+            <h2>1. GeoJSONファイル選択 (統合入力)</h2>
             <div class="file-section">
                 <div class="file-input-group">
-                    <h3>ピン（Point）ファイル (追加入力可) 📍</h3>
-                    <label for="pinFiles">GeoJSONファイル (.json, .geojson):</label>
-                    <p class="stats">※ ファイルを選択するたびにリストに追加されます。</p>
-                    <input type="file" id="pinFiles" accept=".json,.geojson" multiple onchange="addFiles('pin')">
-                    <ul id="pinFileList" class="file-list"></ul>
-                    <button onclick="clearGeoJsonFiles('pin')" class="clear-btn">全ファイルクリア (ピン)</button>
-                </div>
-
-                <div class="file-input-group">
-                    <h3>ポリゴン/ラインファイル (追加入力可) 📐</h3>
-                    <label for="polyFiles">GeoJSONファイル (.json, .geojson):</label>
-                    <p class="stats">※ ファイルを選択するたびにリストに追加されます。</p>
-                    <input type="file" id="polyFiles" accept=".json,.geojson" multiple onchange="addFiles('poly')">
-                    <ul id="polyFileList" class="file-list"></ul>
-                    <button onclick="clearGeoJsonFiles('poly')" class="clear-btn">全ファイルクリア (ポリゴン他)</button>
+                    <label for="allFiles">GeoJSONファイル (.json, .geojson):</label>
+                    <p class="stats">※ **ピンとポリゴンのファイルをまとめて選択**してください。ファイルを選択するたびにリストに追加されます。</p>
+                    <input type="file" id="allFiles" accept=".json,.geojson" multiple onchange="addFiles()">
+                    <ul id="allFileList" class="file-list"></ul>
+                    <button onclick="clearGeoJsonFiles()" class="clear-btn">全ファイルクリア</button>
                 </div>
             </div>
         </div>
 
         <div class="step">
             <h2>2. 処理実行</h2>
-            <p class="stats">※ 「形状(座標)」と「属性(プロパティ)」の両方が完全に一致するフィーチャーを重複とみなします。</p>
-            <button onclick="processFiles()" id="processBtn">ピンとポリゴンをそれぞれマージ・重複削除</button>
+            <p class="stats">※ 処理時に、フィーチャーの形状タイプ（Point/Polygonなど）に応じて自動で分離されます。</p>
+            <button onclick="processFiles()" id="processBtn">ピンとポリゴンを自動分離し、マージ・重複削除</button>
             <div id="statusMessage" class="message"></div>
         </div>
 
@@ -210,41 +200,38 @@
     <script>
         let pinResultString = "";
         let polyResultString = "";
-        let uploadedGeoJsonFiles = {
-            pin: [],
-            poly: []
-        };
+        // 全てのアップロードファイルを一元管理
+        let uploadedAllFiles = []; 
 
         // 0. GeoJSONファイルを追加入力する関数
-        function addFiles(type) {
-            const inputId = type === 'pin' ? 'pinFiles' : 'polyFiles';
-            const input = document.getElementById(inputId);
+        function addFiles() {
+            const input = document.getElementById('allFiles');
             
             // 新しく選択されたファイルを既存のリストに追加
-            uploadedGeoJsonFiles[type] = uploadedGeoJsonFiles[type].concat(Array.from(input.files));
+            uploadedAllFiles = uploadedAllFiles.concat(Array.from(input.files));
             
             // ファイル入力フィールドをクリア（同じファイルを再度選択可能にするため）
             input.value = null; 
 
-            updateFileList(type);
+            updateFileList();
         }
 
         // 1. ファイルリスト表示の更新
-        function updateFileList(type) {
-            const listId = type === 'pin' ? 'pinFileList' : 'polyFileList';
-            const list = document.getElementById(listId);
+        function updateFileList() {
+            const list = document.getElementById('allFileList');
             list.innerHTML = '';
-            const files = uploadedGeoJsonFiles[type];
             
-            if (files.length > 0) {
-                files.forEach(file => {
+            if (uploadedAllFiles.length > 0) {
+                // ファイルリストの表示
+                uploadedAllFiles.forEach(file => {
                     const li = document.createElement('li');
-                    li.textContent = `${type === 'pin' ? '📍' : '📐'} ${file.name}`;
+                    li.textContent = `📁 ${file.name}`;
                     list.appendChild(li);
                 });
 
+                // 合計数の表示
                 const totalLi = document.createElement('li');
-                totalLi.innerHTML = `--- <strong>合計 ${files.length} ファイルを選択済み</strong> ---`;
+                totalLi.innerHTML = `--- <strong>合計 ${uploadedAllFiles.length} ファイルを選択済み</strong> ---`;
                 list.appendChild(totalLi);
             } else {
                 const li = document.createElement('li');
@@ -254,9 +241,9 @@
         }
 
         // 選択されたGeoJSONファイルをクリアする関数
-        function clearGeoJsonFiles(type) {
-            uploadedGeoJsonFiles[type] = [];
-            updateFileList(type);
+        function clearGeoJsonFiles() {
+            uploadedAllFiles = [];
+            updateFileList();
         }
         
         // 2. 正規化文字列変換（オブジェクトのキー順序に依存しない比較用）
@@ -297,24 +284,35 @@
             return uniqueFeatures;
         }
 
-        // 4. ファイルの読み込みとFeaturesの抽出
-        async function loadFeatures(files) {
-            if (files.length === 0) return [];
+        // 4. ファイルの読み込みとFeaturesの抽出（分離もここで実施）
+        async function loadAndSeparateFeatures(files) {
+            if (files.length === 0) return { pin: [], poly: [] };
             
+            const featuresPin = [];
+            const featuresPoly = [];
+
             const filePromises = files.map(file => {
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = e => {
                         try {
                             const json = JSON.parse(e.target.result);
-                            // FeatureCollectionまたは単独FeatureからFeatureを抽出
                             let features = [];
                             if (json.type === "FeatureCollection" && Array.isArray(json.features)) {
                                 features = json.features;
                             } else if (json.type === "Feature") {
                                 features.push(json);
                             }
-                            resolve(features);
+                            
+                            // 読み込んだFeatureをピンとポリゴンに分離
+                            features.forEach(f => {
+                                if (f.geometry && f.geometry.type === "Point") {
+                                    featuresPin.push(f);
+                                } else if (f.geometry) {
+                                    featuresPoly.push(f);
+                                }
+                            });
+                            resolve(); // 読み込み成功
                         } catch (err) {
                             reject(`ファイル「${file.name}」は有効なGeoJSONではありません。`);
                         }
@@ -324,10 +322,9 @@
                 });
             });
 
-            const results = await Promise.all(filePromises);
+            await Promise.all(filePromises);
             
-            // 全てのFeatureをフラットな配列に結合
-            return results.flat();
+            return { pin: featuresPin, poly: featuresPoly };
         }
 
         // 5. メイン処理実行
@@ -339,8 +336,8 @@
             const downloadPolyBtn = document.getElementById('downloadPolyBtn');
             const processBtn = document.getElementById('processBtn');
 
-            const allFiles = uploadedGeoJsonFiles.pin.length + uploadedGeoJsonFiles.poly.length;
-            if (allFiles === 0) {
+            const allFilesCount = uploadedAllFiles.length;
+            if (allFilesCount === 0) {
                 alert("GeoJSONファイルを選択してください。");
                 return;
             }
@@ -356,14 +353,10 @@
             polyResultString = "";
 
             try {
-                // --- A. 全Featureの読み込みと分離 ---
-                const pinFiles = uploadedGeoJsonFiles.pin;
-                const polyFiles = uploadedGeoJsonFiles.poly;
-                
-                const [allPinFeatures, allPolyFeatures] = await Promise.all([
-                    loadFeatures(pinFiles),
-                    loadFeatures(polyFiles)
-                ]);
+                // --- A. 全Featureの読み込みとピン/ポリゴンへの分離 ---
+                const separatedFeatures = await loadAndSeparateFeatures(uploadedAllFiles);
+                const allPinFeatures = separatedFeatures.pin;
+                const allPolyFeatures = separatedFeatures.poly;
 
                 // --- B. ピンの重複削除 ---
                 const totalPinCount = allPinFeatures.length;
@@ -372,7 +365,7 @@
                 
                 pinResultString = JSON.stringify({
                     type: "FeatureCollection",
-                    features: uniquePinFeatures.filter(f => f.geometry.type === "Point") // 念のためPointのみフィルタ
+                    features: uniquePinFeatures
                 }, null, 2);
                 
                 outputPinArea.value = pinResultString;
@@ -384,15 +377,15 @@
 
                 polyResultString = JSON.stringify({
                     type: "FeatureCollection",
-                    features: uniquePolyFeatures.filter(f => f.geometry.type !== "Point") // Point以外をフィルタ
+                    features: uniquePolyFeatures
                 }, null, 2);
 
                 outputPolyArea.value = polyResultString;
 
                 // --- D. 結果表示 ---
-                statusDiv.textContent = `✅ 処理完了: \n` + 
-                                        `  📍 ピン (Point): ${pinFiles.length}ファイルから ${totalPinCount}件 → ユニーク ${uniquePinCount}件 (重複削除: ${totalPinCount - uniquePinCount}件)\n` +
-                                        `  📐 ポリゴン他: ${polyFiles.length}ファイルから ${totalPolyCount}件 → ユニーク ${uniquePolyCount}件 (重複削除: ${totalPolyCount - uniquePolyCount}件)`;
+                statusDiv.textContent = `✅ 処理完了: ${allFilesCount}ファイルからフィーチャーを分離しました。\n` + 
+                                        `  📍 ピン (Point) - ${totalPinCount}件 → ユニーク ${uniquePinCount}件 (重複削除: ${totalPinCount - uniquePinCount}件)\n` +
+                                        `  📐 ポリゴン他 - ${totalPolyCount}件 → ユニーク ${uniquePolyCount}件 (重複削除: ${totalPolyCount - uniquePolyCount}件)`;
                 statusDiv.className = "message success";
                 statusDiv.style.display = "block";
                 
@@ -405,7 +398,7 @@
                 statusDiv.style.display = "block";
             } finally {
                 processBtn.disabled = false;
-                processBtn.textContent = "ピンとポリゴンをそれぞれマージ・重複削除";
+                processBtn.textContent = "ピンとポリゴンを自動分離し、マージ・重複削除";
             }
         }
 
@@ -428,8 +421,7 @@
         }
 
         // 初回実行時にファイルリストを更新
-        updateFileList('pin');
-        updateFileList('poly');
+        updateFileList();
     </script>
 </body>
 </html>
