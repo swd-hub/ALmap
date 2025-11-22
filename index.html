@@ -1,59 +1,141 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ALmap メインページ</title>
+    <meta name="discription" content="eMAFF農地データを活用する">
+    <meta name="auther" content="澤田泰人">
+    <meta name="date" content="2025年11月20日">
+ 　 <meta charset="UTF-8">
+　　<meta name="robots" content="noindex">
+  <title>eMAFF農地データツール 一覧</title>
   <style>
     body {
       font-family: sans-serif;
-      text-align: center;
-      margin-top: 50px;
+      padding: 2em;
+      background-color: #f9f9f9;
     }
-    select {
-      font-size: 18px;
-      padding: 6px;
-      margin: 10px;
+    h1 {
+      color: #333;
     }
-    button {
-      font-size: 18px;
-      padding: 8px 16px;
-      margin-top: 10px;
-      background: #1565c0;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    li {
+      background: #fff;
+      margin: 1em 0;
+      padding: 1em;
+      border-left: 5px solid #4CAF50;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    a {
+      font-weight: bold;
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .description {
+      margin-top: 0.5em;
+      color: #555;
+    }
+
+    .text {
+      margin-right: 10px; /* テキストと画像の間にスペースを作る */
+    }
+    .thumbnail {
+      width: 300px; /* サムネイル画像の幅を指定 */
+      height: auto; /* 高さは自動調整 */
+      cursor: pointer; /* クリック可能なマウスカーソル */
+    }
+
+    /* モーダルスタイル */
+    .modal {
+      display: none; /* 最初は非表示 */
+      position: fixed;
+      z-index: 1;
+      padding-top: 100px;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.8); /* 背景の色 */
+    }
+    .modal-content {
+      margin: auto;
+      display: block;
+      width: 80%; /* 拡大画像の大きさ */
+      max-width: 700px;
+    }
+    
+    .close {
+      position: absolute;
+      top: 15px;
+      right: 35px;
+      color: white;
+      font-size: 40px;
+      font-weight: bold;
+      transition: 0.3s;
       cursor: pointer;
-    }
-    button:hover {
-      background: #0d47a1;
     }
   </style>
 </head>
 <body>
-  <h1>ALmap メインページ</h1>
-  <p>表示したい地図ファイルを選んでください。</p>
-
-  <!-- ✅ 選択メニュー -->
-  <select id="mapSelect">
-    <option value="ALmap.htm">ALmap</option>
-    <option value="PinGeojson2CSV(UTF8).htm">PinGeojson2CSV(UTF8)</option>
-    <option value="PinCSV(SJIS)2Geojson.htm">PinCSV(SJIS)2Geojso</option>
-    <option value="Polygon_GeoJSON ↔ CSV 相互変換ツール.htm">Polygon_GeoJSON ↔ CSV 相互変換ツール</option>
-    <option value="Pin_GeoJSON ↔ CSV （SJIS）相互変換ツール.htm">Pin_GeoJSON ↔ CSV （SJIS）相互変換ツール</option>
-  </select>
-
-  <!-- ✅ 開くボタン -->
-  <button onclick="openMap()">開く</button>
-
+  <button onclick="window.open('https://map.maff.go.jp/?dlgName=jusho', '_blank')">eMAFF農地ナビ
+  を開く</button>
+  <h1>eMAFF農地ナビデータツール 一覧</h1>
+  <ul>
+    <li>
+        <a href="ALmap.htm" target="_blank">農地表示</a>
+        <div class="description">農地のポリゴン（輪郭）とピン（情報）から面積と作物の農地ポリゴンを出力する</div>
+        <img src="images/ALmap.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+    </li>
+　　 <li>
+        <a href="PinData_PolygonData_Merged_Region_Extractor.htm" target="_blank">地域限定データ</a>
+        <div class="description">複数のピンとポリゴンの中から任意地域を出力する</div>
+        <img src="images/PinData_PolygonData_Merged_Region_Extractor.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+    </li>
+    <li>
+        <a href="Farm_Data_ Extractor.htm" target="_blank">農場データ</a>
+        <div class="description">ＣＳＶに記した農地アドレスに対応するピンとポリゴンを出力する</div>
+        <img src="images/Farm_Data_ Extractor.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+    </li>
+　　 <li>
+        <a href="Pin_Polygon_Matcher.htm" class="text" target="_blank">ピンとポリゴンの照合</a>
+        <div class="description">ピンとポリゴンの照合して対応するピンとポリゴンを出力する</div>
+        <img src="images/Pin_Polygon_Matcher.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+    </li>  
+　　 <li>
+        <a href="Unified_GeoJSON_CSV_Converter.htm" class="text" target="_blank">農地データとＣＳＶの相互変換</a>
+        <div class="description">ピンとポリゴンの１ファイルをＣＳＶと相互に変換する</div>
+        <img src="images/Unified_GeoJSON_CSV_Converter.png" alt="画像" class="thumbnail" onclick="openModal(this)">
+    </li>  
+  </ul>
+  <div id="myModal" class="modal">
+    <span class="close" onclick="closeModal()">&times;</span>
+    <img class="modal-content" id="img01">
+  </div>
   <script>
-    function openMap() {
-      const selectedFile = document.getElementById("mapSelect").value;
-      // 同じフォルダ内のファイルを開く
-      window.location.href = selectedFile;
+    function openModal(img) {
+      const modal = document.getElementById("myModal");
+      const modalImg = document.getElementById("img01");
+      modal.style.display = "block";
+      modalImg.src = img.src;
+    }
+
+    function closeModal() {
+      const modal = document.getElementById("myModal");
+      modal.style.display = "none";
+    }
+
+    // モーダル外をクリックしたときにモーダルを閉じる
+    window.onclick = function(event) {
+      const modal = document.getElementById("myModal");
+      if (event.target === modal) {
+        closeModal();
+      }
     }
   </script>
 </body>
 </html>
-
-
