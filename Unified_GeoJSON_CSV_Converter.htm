@@ -168,7 +168,9 @@
     // 型の自動復元 (True/False/JSON/数値)
     function restoreType(val) {
       if (typeof val !== 'string') return val;
-      if (val === '') return null;
+      // 修正箇所：空文字の場合はnullではなく空文字のまま返す
+      if (val === '') return ''; 
+      
       const vLow = val.toLowerCase();
       if (vLow === 'true') return true;
       if (vLow === 'false') return false;
@@ -185,7 +187,7 @@
     }
 
     /* ==========================================
-       WKT / ジオメトリ解析エンジン (Code 1の強力版を採用)
+       WKT / ジオメトリ解析エンジン
        ========================================== */
     
     function cleanWkt(wkt) {
