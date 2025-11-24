@@ -37,16 +37,7 @@
             <button onclick="processFiles()" id="processBtn" class="process-button">ファイルを処理 (重複削除・地域グルーピング)</button>
             <div id="statusMessage" style="display:none;"></div>
         </div>
-<!--
-        <div id="settings-area">
-            <h3>🗺️ 空間照合の設定 (※現在は属性キーを使用しません)</h3>
-            <p>現在の抽出ロジックは、選択地域のピンの座標から計算される**四角形 (BBox)** と、ポリゴンのBBoxの**交差判定**に基づいています。このため、以下のキー設定は無視されます。</p>
-            <label for="pinKey">📍 ピンデータの照合キー (無視):</label>
-            <input type="text" id="pinKey" placeholder="Pin Key Name" value="id" style="width: 150px;" disabled>
-            <label for="polyKey" style="margin-left: 20px;">📐 ポリゴンデータの照合キー (無視):</label>
-            <input type="text" id="polyKey" placeholder="Polygon Key Name" value="id" style="width: 150px;" disabled>
-        </div>
--->
+
         <div id="address-selection">
             <h3>地域選択</h3>
             <p>※ファイルを処理後、ここに地域リストが表示されます。</p>
@@ -70,7 +61,7 @@
             
             <div style="max-height: 400px; overflow-y: auto;">
                 <table id="dataTable">
-                    </table>
+                </table>
             </div>
         </div>
     </div>
@@ -299,12 +290,12 @@
                 
                 // 最初の住所を自動選択して表示
                 if (uniqueAddresses.length > 0) {
-                     const firstAddress = uniqueAddresses[0];
-                     displayFilteredData(firstAddress);
-                     const firstRadio = document.querySelector('.radio-container input[type="radio"]');
-                     if(firstRadio) firstRadio.checked = true;
+                      const firstAddress = uniqueAddresses[0];
+                      displayFilteredData(firstAddress);
+                      const firstRadio = document.querySelector('.radio-container input[type="radio"]');
+                      if(firstRadio) firstRadio.checked = true;
                 } else {
-                     displayFilteredData(null);
+                      displayFilteredData(null);
                 }
                 
                 // 処理結果のステータスメッセージ表示
@@ -369,16 +360,12 @@
                 return;
             }
 
-            // ⚠️ ATTRIBUTE MATCHING KEYS ARE IGNORED FOR MATCHING LOGIC
-            // const PIN_MATCH_KEY = document.getElementById('pinKey').value.trim();
-            // const POLY_MATCH_KEY = document.getElementById('polyKey').value.trim();
-
             const group = groupedFeatures.get(selectedAddress);
             
             // 1. 選択された地域のピンデータ（地域フィルター済）を取得
             const selectedPins = group.pin;
 
-            // 2. 💡 (NEW) 選択されたピンフィーチャからBBox（検索範囲）を計算
+            // 2. 選択されたピンフィーチャからBBox（検索範囲）を計算
             const pinBBox = calculatePinBBox(selectedPins); 
 
             let matchedPolygons = [];
@@ -389,7 +376,7 @@
                 bboxStatusMessage = `⚠️ ピン ${selectedPins.length} 件から有効な座標を抽出できませんでした。`;
                 // MatchedPolygonsは空のまま
             } else {
-                // 3. 💡 (NEW) 全ポリゴンフィーチャから、ピンBBoxと交差するもののみを抽出 (空間照合ロジック)
+                // 3. 全ポリゴンフィーチャから、ピンBBoxと交差するもののみを抽出 (空間照合ロジック)
                 matchedPolygons = allUniquePolyFeatures.filter(f => {
                     const polyBBox = getFeatureBBox(f);
                     
@@ -485,6 +472,17 @@
         }
         
         /**
+         * 日付文字列 (YYYYMMDD) を生成するヘルパー関数
+         */
+        function getCurrentDateString() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}`;
+        }
+
+        /**
          * 選択された地域のピン（Point）フィーチャをGeoJSONファイルとしてダウンロードします。
          */
         function downloadPinGeoJson() {
@@ -495,8 +493,15 @@
                 features: currentSelectedGroup.pin
             };
 
-            const selectedAddress = document.getElementById('selectedAddressText').textContent.split('\n')[0].split('(')[0].replace('選択された地域：', '').trim();
-            const filename = `PinData_Region_Extractor_${selectedAddress || 'data'}.geojson`;
+            // ラジオボタンの選択値から純粋な地域名を取得
+            const selectedRadio = document.querySelector('input[name="cleanAddress"]:checked');
+            const regionName = selectedRadio ? selectedRadio.value : 'data';
+            
+            // 日付を取得
+            const dateStr = getCurrentDateString();
+            
+            // ファイル名生成: 地域名_Pin_YYYYMMDD.geojson
+            const filename = `${regionName}_Pin_${dateStr}.geojson`;
             
             const dataStr = JSON.stringify(geoJsonOutput, null, 2); 
             const blob = new Blob([dataStr], { type: "application/geo+json" });
@@ -522,8 +527,15 @@
                 features: currentSelectedGroup.poly
             };
 
-            const selectedAddress = document.getElementById('selectedAddressText').textContent.split('\n')[0].split('(')[0].replace('選択された地域：', '').trim();
-            const filename = `PolygonData_Matched_BBox_${selectedAddress || 'data'}.geojson`; 
+            // ラジオボタンの選択値から純粋な地域名を取得
+            const selectedRadio = document.querySelector('input[name="cleanAddress"]:checked');
+            const regionName = selectedRadio ? selectedRadio.value : 'data';
+            
+            // 日付を取得
+            const dateStr = getCurrentDateString();
+
+            // ファイル名生成: 地域名_Polygon_YYYYMMDD.geojson
+            const filename = `${regionName}_Polygon_${dateStr}.geojson`; 
             
             const dataStr = JSON.stringify(geoJsonOutput, null, 2); 
             const blob = new Blob([dataStr], { type: "application/geo+json" });

@@ -1,141 +1,200 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta name="discription" content="eMAFF農地データを活用する">
-    <meta name="auther" content="澤田泰人">
+    <meta name="description" content="eMAFF農地データを活用する">
+    <meta name="author" content="澤田泰人">
     <meta name="date" content="2025年11月20日">
- 　 <meta charset="UTF-8">
-　　<meta name="robots" content="noindex">
-  <title>eMAFF農地データツール 一覧</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 2em;
-      background-color: #f9f9f9;
-    }
-    h1 {
-      color: #333;
-    }
-    ul {
-      list-style-type: none;
-      padding-left: 0;
-    }
-    li {
-      background: #fff;
-      margin: 1em 0;
-      padding: 1em;
-      border-left: 5px solid #4CAF50;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    a {
-      font-weight: bold;
-      color: #0066cc;
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    .description {
-      margin-top: 0.5em;
-      color: #555;
-    }
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eMAFF農地データツール 一覧</title>
+    <style>
+        /* ベースデザイン (ツール側と統一) */
+        body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        /* ヘッダー周り */
+        h1 { color: #d63384; text-align: center; border-bottom: 2px solid #d63384; padding-bottom: 10px; margin-bottom: 20px; }
+        
+        /* トップのボタン */
+        .top-btn-area { text-align: right; margin-bottom: 20px; }
+        .maff-btn { 
+            background: #007bff; color: white; border: none; padding: 10px 20px; 
+            border-radius: 5px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block;
+        }
+        .maff-btn:hover { background: #0056b3; }
 
-    .text {
-      margin-right: 10px; /* テキストと画像の間にスペースを作る */
-    }
-    .thumbnail {
-      width: 300px; /* サムネイル画像の幅を指定 */
-      height: auto; /* 高さは自動調整 */
-      cursor: pointer; /* クリック可能なマウスカーソル */
-    }
+        /* リストスタイル (カード型) */
+        ul { list-style-type: none; padding: 0; margin: 0; }
+        li { 
+            background: #fafafa; 
+            margin-bottom: 20px; 
+            padding: 20px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            display: flex; 
+            flex-wrap: wrap; /* スマホ対応 */
+            justify-content: space-between;
+            align-items: flex-start;
+            transition: box-shadow 0.2s;
+        }
+        li:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: #fff;
+            border-color: #c3e6cb; /* ホバー時に少し緑っぽく */
+        }
 
-    /* モーダルスタイル */
-    .modal {
-      display: none; /* 最初は非表示 */
-      position: fixed;
-      z-index: 1;
-      padding-top: 100px;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      overflow: auto;
-      background-color: rgba(0, 0, 0, 0.8); /* 背景の色 */
-    }
-    .modal-content {
-      margin: auto;
-      display: block;
-      width: 80%; /* 拡大画像の大きさ */
-      max-width: 700px;
-    }
-    
-    .close {
-      position: absolute;
-      top: 15px;
-      right: 35px;
-      color: white;
-      font-size: 40px;
-      font-weight: bold;
-      transition: 0.3s;
-      cursor: pointer;
-    }
-  </style>
+        /* テキストエリア */
+        .text-area {
+            flex: 1;
+            min-width: 250px;
+            margin-right: 20px;
+        }
+        .item-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #0066cc;
+            text-decoration: none;
+            display: block;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 5px;
+        }
+        .item-title:hover { text-decoration: none; color: #004494; border-bottom-style: solid; }
+        .description { color: #555; line-height: 1.6; font-size: 0.95em; }
+
+        /* サムネイル画像 */
+        .thumbnail {
+            width: 200px;
+            height: auto;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .thumbnail:hover { transform: scale(1.02); opacity: 0.9; }
+
+        /* モーダルスタイル */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            padding-top: 50px; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0, 0, 0, 0.85); 
+        }
+        .modal-content {
+            margin: auto;
+            display: block;
+            width: 80%;
+            max-width: 900px;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            transition: 0.3s;
+            cursor: pointer;
+        }
+        .close:hover, .close:focus { color: #bbb; text-decoration: none; cursor: pointer; }
+        
+        /* スマホ向け調整 */
+        @media (max-width: 600px) {
+            li { flex-direction: column; }
+            .thumbnail { width: 100%; margin-top: 15px; }
+            .text-area { margin-right: 0; }
+        }
+    </style>
 </head>
 <body>
-  <button onclick="window.open('https://map.maff.go.jp/?dlgName=jusho', '_blank')">eMAFF農地ナビ
-  を開く</button>
-  <h1>eMAFF農地ナビデータツール 一覧</h1>
-  <ul>
-    <li>
-        <a href="ALmap.htm" target="_blank">農地表示</a>
-        <div class="description">農地のポリゴン（輪郭）とピン（情報）から面積と作物の農地ポリゴンを出力する</div>
-        <img src="images/ALmap.png" alt="画像" class="thumbnail" onclick="openModal(this)">
-    </li>
-　　 <li>
-        <a href="PinData_PolygonData_Merged_Region_Extractor.htm" target="_blank">地域限定データ</a>
-        <div class="description">複数のピンとポリゴンの中から任意地域を出力する</div>
-        <img src="images/PinData_PolygonData_Merged_Region_Extractor.png" alt="画像" class="thumbnail" onclick="openModal(this)">
-    </li>
-    <li>
-        <a href="Farm_Data_ Extractor.htm" target="_blank">農場データ</a>
-        <div class="description">ＣＳＶに記した農地アドレスに対応するピンとポリゴンを出力する</div>
-        <img src="images/Farm_Data_ Extractor.png" alt="画像" class="thumbnail" onclick="openModal(this)">
-    </li>
-　　 <li>
-        <a href="Pin_Polygon_Matcher.htm" class="text" target="_blank">ピンとポリゴンの照合</a>
-        <div class="description">ピンとポリゴンの照合して対応するピンとポリゴンを出力する</div>
-        <img src="images/Pin_Polygon_Matcher.png" alt="画像" class="thumbnail" onclick="openModal(this)">
-    </li>  
-　　 <li>
-        <a href="Unified_GeoJSON_CSV_Converter.htm" class="text" target="_blank">農地データとＣＳＶの相互変換</a>
-        <div class="description">ピンとポリゴンの１ファイルをＣＳＶと相互に変換する</div>
-        <img src="images/Unified_GeoJSON_CSV_Converter.png" alt="画像" class="thumbnail" onclick="openModal(this)">
-    </li>  
-  </ul>
-  <div id="myModal" class="modal">
+
+<div class="container">
+    <div class="top-btn-area">
+        <button class="maff-btn" onclick="window.open('https://map.maff.go.jp/?dlgName=jusho', '_blank')">🌐 eMAFF農地ナビを開く</button>
+    </div>
+
+    <h1>eMAFF農地データツール 一覧</h1>
+
+    <ul>
+        <li>
+            <div class="text-area">
+                <a href="ALmap.htm" target="_blank" class="item-title">🗺️ 農地表示</a>
+                <div class="description">農地のポリゴン（輪郭）とピン（情報）から、面積と作物の情報を含む農地ポリゴンを描画・出力します。</div>
+            </div>
+            <img src="images/ALmap.png" alt="ALmapプレビュー" class="thumbnail" onclick="openModal(this)">
+        </li>
+
+        <li>
+            <div class="text-area">
+                <a href="PinData_PolygonData_Merged_Region_Extractor.htm" target="_blank" class="item-title">📍 地域限定データ抽出</a>
+                <div class="description">複数のピンとポリゴンデータの中から、指定した任意地域のデータのみを切り出して出力します。</div>
+            </div>
+            <img src="images/PinData_PolygonData_Merged_Region_Extractor.png" alt="地域抽出プレビュー" class="thumbnail" onclick="openModal(this)">
+        </li>
+
+        <li>
+            <div class="text-area">
+                <a href="Farm_Data_ Extractor.htm" target="_blank" class="item-title">🚜 農場データ抽出</a>
+                <div class="description">CSVに記載した農地アドレス（住所やID）に対応するピンとポリゴンを自動的に抽出します。</div>
+            </div>
+            <img src="images/Farm_Data_ Extractor.png" alt="農場データプレビュー" class="thumbnail" onclick="openModal(this)">
+        </li>
+
+        <li>
+            <div class="text-area">
+                <a href="Pin_Polygon_Matcher.htm" class="item-title" target="_blank">🔗 ピンとポリゴンの照合</a>
+                <div class="description">ピン（点）とポリゴン（面）の位置関係を照合し、関連付けられた正しいペアのみを出力します。</div>
+            </div>
+            <img src="images/Pin_Polygon_Matcher.png" alt="照合ツールプレビュー" class="thumbnail" onclick="openModal(this)">
+        </li>  
+
+        <li>
+            <div class="text-area">
+                <a href="Unified_GeoJSON_CSV_Converter.htm" class="item-title" target="_blank">🔄 農地データとCSVの相互変換</a>
+                <div class="description">GeoJSON（ピンまたはポリゴン）とCSVファイルを相互に変換し、エクセル等での編集を容易にします。</div>
+            </div>
+            <img src="images/Unified_GeoJSON_CSV_Converter.png" alt="変換ツールプレビュー" class="thumbnail" onclick="openModal(this)">
+        </li>  
+    </ul>
+</div>
+
+<div id="myModal" class="modal">
     <span class="close" onclick="closeModal()">&times;</span>
     <img class="modal-content" id="img01">
-  </div>
-  <script>
+</div>
+
+<script>
     function openModal(img) {
-      const modal = document.getElementById("myModal");
-      const modalImg = document.getElementById("img01");
-      modal.style.display = "block";
-      modalImg.src = img.src;
+        const modal = document.getElementById("myModal");
+        const modalImg = document.getElementById("img01");
+        modal.style.display = "flex"; /* センター寄せのためにflexに変更 */
+        modal.style.justifyContent = "center";
+        modal.style.alignItems = "center";
+        modalImg.src = img.src;
     }
 
     function closeModal() {
-      const modal = document.getElementById("myModal");
-      modal.style.display = "none";
+        const modal = document.getElementById("myModal");
+        modal.style.display = "none";
     }
 
     // モーダル外をクリックしたときにモーダルを閉じる
     window.onclick = function(event) {
-      const modal = document.getElementById("myModal");
-      if (event.target === modal) {
-        closeModal();
-      }
+        const modal = document.getElementById("myModal");
+        if (event.target === modal) {
+            closeModal();
+        }
     }
-  </script>
+</script>
+
 </body>
 </html>

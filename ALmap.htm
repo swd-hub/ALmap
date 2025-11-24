@@ -152,12 +152,26 @@ const propertyLabels = {
 
 // --- 色定義 ---
 const cropColors = {
-  "主食用きぬむすめ": "#90ee90", "主食用つや姫": "#ffc0cb", "主食用つきあかり": "#add8e6", "主食用コシヒカリ": "#6a5acd",
-  "稲WCS用きぬむすめ": "#90ee90", "稲WCS用つきはやか": "#9acd32", "稲WCS用たちすずか": "#d2b48c", "稲WCS用ヒメノモチ": "#ffb6c1",
-  "飼料用米": "#dda0dd", "大麦": "#ffcc99", "小麦": "#ff8c00", "ブロッコリー": "#228b22", "タマネギ": "#deb887",
-  "飼料用トウモロコシ": "#ffff00", "はとむぎ": "#654321", "さつまいも": "#800080", "大豆": "#f4a300", "その他": "#bdbdbd"
+  "主食用きぬむすめ": "#90ee90",
+  "主食用つや姫": "#ffc0cb",
+  "主食用つきあかり": "#add8e6",
+  "主食用コシヒカリ": "#6a5acd",
+  "稲WCS用きぬむすめ": "#90ee90",
+  "稲WCS用つきはやか": "#9acd32", 
+  "稲WCS用たちすずか": "#d2b48c", 
+  "稲WCS用ヒメノモチ": "#ffb6c1",
+  "飼料用米": "#dda0dd", 
+  "大麦": "#ffcc99", 
+  "小麦": "#ff8c00", 
+  "ブロッコリー": "#228b22", 
+  "タマネギ": "#deb887",
+  "飼料用トウモロコシ": "#ffff00", 
+  "はとむぎ": "#654321", 
+  "さつまいも": "#800080", 
+  "大豆": "#f4a300", 
+  "その他": "#bdbdbd"
 };
-const cropOrder = Object.keys(cropColors); // 簡易的に定義順を使用
+const cropOrder = Object.keys(cropColors); 
 
 function isHatchedCrop(cropName) {
   const n = normalizeCrop(cropName);
@@ -214,7 +228,10 @@ function getPolygonRenderStyle(cropName, isSelected = false) {
     const base = getBaseCropNameForHatching(n);
     const bg = cropColors[base] || cropColors["その他"] || "#e88";
     if (map) {
-      const pid = `hatch-${base.replace(/[^a-zA-Z0-9]/g, '-')}-${map._leaflet_id}`;
+      // ★修正: 日本語を含んでもIDが重複しないように文字コードベースのユニークIDを生成
+      const safeId = base.split('').map(c => c.charCodeAt(0)).join('-'); 
+      const pid = `hatch-${safeId}-${map._leaflet_id}`;
+      
       injectSvgHatchPattern(map, pid, bg);
       currentFill = `url(#${pid})`;
     } else { currentFill = bg; }
@@ -258,7 +275,6 @@ function togglePinSelection(marker, forceState = null) {
 
   updateAreaTable();
   
-  // 追加された場合のみ詳細パネルを開く（複数追加時は最後の1つを表示）
   if (isAdded || (forceState === null && idx === -1)) {
     const props = marker.feature.properties;
     let html = "<table>";
@@ -268,9 +284,6 @@ function togglePinSelection(marker, forceState = null) {
     }
     html += "</table>";
     document.getElementById("propertyDetails").innerHTML = html;
-    // 複数選択時はパネルがうるさいので、自動オープンはピン直接クリック時などが望ましいが
-    // ここでは一応情報を更新しておく
-    // document.getElementById("infoPanel").classList.add("open"); 
   }
 }
 
@@ -283,7 +296,6 @@ function updateAreaTable() {
     return;
   }
 
-  // 地番でソート（オプション）
   selectedPins.sort((a, b) => {
     const tA = String(a.feature.properties.Tiban || "");
     const tB = String(b.feature.properties.Tiban || "");
@@ -334,10 +346,15 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("fileInput").addEventListener("change", function(event) {
     const files = event.target.files; if (!files.length) return;
     let processed = 0;
+    let lastLoadedPinLatLng = null;
+
     Array.from(files).forEach(file => {
       if (loadedFileNames.includes(file.name)) {
         alert(`「${file.name}」は読込済みです。`);
-        if (++processed === files.length) updateLoadedFileNamesDisplay();
+        if (++processed === files.length) {
+          updateLoadedFileNamesDisplay();
+          if (lastLoadedPinLatLng) map.setView(lastLoadedPinLatLng, 17);
+        }
         return;
       }
       const reader = new FileReader();
@@ -356,7 +373,6 @@ document.addEventListener("DOMContentLoaded", function() {
                   }));
                 }
                 
-                // ★ポリゴンクリック時：複数ピン検索の実装
                 lyr.on("click", function(ev) {
                   L.DomEvent.stopPropagation(ev);
                   const currentCrop = getSelectedCrop();
@@ -377,36 +393,31 @@ document.addEventListener("DOMContentLoaded", function() {
                     isSelectedNow = true;
                   }
 
-                  // ★修正箇所：ポリゴン内の全ピンを探して配列に入れる
                   if (isAreaCalcMode()) {
                     const containedPins = [];
                     markerLayerGroup.eachLayer(m => {
-                      // ポリゴン内にピンが含まれるか判定 (Turf.js)
                       if (turf.booleanPointInPolygon(m.feature, feature)) {
                         containedPins.push(m);
                       }
                     });
 
                     if (containedPins.length > 0) {
-                      // 見つかった全てのピンに対して追加/削除処理を実行
                       containedPins.forEach(pin => {
-                         togglePinSelection(pin, isSelectedNow);
+                          togglePinSelection(pin, isSelectedNow);
                       });
-                    } else {
-                      // ピンが見つからない場合（警告はうるさいのでコメントアウト可）
-                      // console.log("No pins found in this polygon");
                     }
                   }
                 });
               } 
               else if (feature.geometry.type === "Point") {
                 const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                lastLoadedPinLatLng = latlng;
                 const marker = L.marker(latlng);
                 marker.feature = feature;
                 markerLayerGroup.addLayer(marker);
                 marker.on("click", function(ev) {
                   L.DomEvent.stopPropagation(ev);
-                  togglePinSelection(marker, null); // ピン直接クリックはトグル
+                  togglePinSelection(marker, null); 
                   document.getElementById("infoPanel").classList.add("open");
                 });
                 if (feature.properties.Tiban) {
@@ -419,7 +430,13 @@ document.addEventListener("DOMContentLoaded", function() {
           });
           if (!loadedFileNames.includes(file.name)) loadedFileNames.push(file.name);
         } catch(err) { alert(`エラー: ${file.name}`); }
-        if (++processed === files.length) updateLoadedFileNamesDisplay();
+        
+        if (++processed === files.length) {
+           updateLoadedFileNamesDisplay();
+           if (lastLoadedPinLatLng) {
+             map.setView(lastLoadedPinLatLng, 17);
+           }
+        }
       };
       reader.readAsText(file);
     });
