@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV絞り込み & 空間抽出ツール (ファイル名表示版)</title>
+    <title>CSV絞り込み & 空間抽出ツール (修正版)</title>
     <style>
         body {
             font-family: "Helvetica Neue", Arial, sans-serif;
@@ -166,9 +166,9 @@
 <body>
 
     <div class="container">
-        <h1>CSV絞り込み & 空間抽出ツール</h1>
-        <p>ピンとポリゴンを含むGeoJSONファイル(複数可)を入力し、<br>
-           <b>① CSVでピンを絞り込み</b> → <b>② そのピンの範囲にあるポリゴンを抽出</b> します。</p>
+        <h1>CSV絞り込み & 空間抽出ツール (修正版)</h1>
+        <p>ピンとポリゴンを含むGeoJSONファイルを入力し、<br>
+           <b>① CSVでピンを絞り込み</b> → <b>② そのピンが含まれるポリゴンのみを抽出</b> します。</p>
 
         <div class="section">
             <h2>📂 1. GeoJSONファイル入力 (混合可)</h2>
@@ -295,7 +295,6 @@
             document.getElementById('outPolys').value = '';
 
             // 入力チェック
-            // グローバル変数の inputGeoJsonFiles を確認
             if (inputGeoJsonFiles.length === 0) {
                 showMsg("❌ GeoJSONファイルが選択されていません。", true);
                 return;
@@ -316,7 +315,7 @@
                     throw new Error("CSVファイルから有効なデータ（住所など）を読み取れませんでした。");
                 }
 
-                // 2. GeoJSONの読み込みと分類 (グローバル配列を使用)
+                // 2. GeoJSONの読み込みと分類
                 const { pins, polygons } = await loadAndSplitGeoJson(inputGeoJsonFiles);
 
                 if (pins.length === 0) {
@@ -336,14 +335,29 @@
                     throw new Error("CSVの条件に一致するピンが1件もありませんでした。");
                 }
 
-                // 4. 残ったピンからBBox (範囲) を計算
-                const searchBBox = calculateBBox(filteredPins); // [minX, minY, maxX, maxY]
+                // ----------------------------------------------------------
+                // 修正箇所: ここで「全体のBBox」ではなく「各ポリゴンごとの包含判定」を行う
+                // ----------------------------------------------------------
+                
+                // 4. 残ったピンの座標リストを作成（高速化のため）
+                const pinCoords = filteredPins.map(p => p.geometry.coordinates);
 
-                // 5. BBoxを使ってポリゴンを抽出
+                // 5. ポリゴンを一つずつチェックし、中にピンが含まれるか確認
                 const matchedPolygons = polygons.filter(poly => {
-                    const polyBBox = calculateBBox([poly]);
-                    return checkIntersection(searchBBox, polyBBox);
+                    // そのポリゴンのBBoxを計算 [minX, minY, maxX, maxY]
+                    const polyBBox = calculateBBox([poly]); 
+                    if (!polyBBox) return false;
+                    
+                    const [minX, minY, maxX, maxY] = polyBBox;
+
+                    // 残ったピンのうち、ひとつでもこのポリゴンのBBox内にあるか？
+                    // (詳細な形状判定は重くなるため、コード2のデフォルト動作に合わせてBBox判定を採用)
+                    return pinCoords.some(([px, py]) => {
+                        return px >= minX && px <= maxX && py >= minY && py <= maxY;
+                    });
                 });
+
+                // ----------------------------------------------------------
 
                 // 6. 結果の生成
                 const finalPinsGeoJSON = { type: "FeatureCollection", features: filteredPins };
@@ -366,7 +380,7 @@
                     `⬇\n` +
                     `📍 絞り込みピン: ${filteredPins.length}件 (全${pins.length}件中)\n` +
                     `🗺️ 抽出ポリゴン: ${matchedPolygons.length}件 (全${polygons.length}件中)\n` +
-                    `\n(ピンの範囲と交差するポリゴンを抽出しました)`
+                    `\n(各ポリゴンの範囲内に、有効なピンが存在するもののみ抽出しました)`
                 );
 
             } catch (err) {
@@ -428,7 +442,7 @@
             return { pins, polygons };
         }
 
-        // BBox計算
+        // BBox計算 (ポリゴンの範囲 [minLng, minLat, maxLng, maxLat] を返す)
         function calculateBBox(features) {
             let minLng = Infinity, maxLng = -Infinity;
             let minLat = Infinity, maxLat = -Infinity;
@@ -460,13 +474,6 @@
 
             if (minLng === Infinity) return null;
             return [minLng, minLat, maxLng, maxLat];
-        }
-
-        // BBox交差判定
-        function checkIntersection(bbox1, bbox2) {
-            if (!bbox1 || !bbox2) return false;
-            return (bbox1[2] >= bbox2[0] && bbox1[0] <= bbox2[2] &&
-                    bbox1[3] >= bbox2[1] && bbox1[1] <= bbox2[3]);
         }
 
         function showMsg(text, isError = false) {
