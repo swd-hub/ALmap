@@ -145,13 +145,46 @@ let markerLayerGroup;
 let tibanLayerGroup;
 
 const propertyLabels = {
+  FarmCommitteeCd: "農業委員会コード",
+  FarmCommitteeName: "農業委員会名",
+  TodofukenCode: "都道府県コード",
+  ShikuchosonCode: "市町村コード",
+  OazaCode: "大字コード",
+  ClassificationOfLandCodeName: "地目",
+  ClassificationOfLand: "地目コード",
+  AreaOnRegistry: "登記簿面積（㎡）",
+  SectionOfNoushinhouCodeName: "農振法区分",
+  SectionOfNoushinhou: "農振法区分コード",
+  SectionOfToshikeikakuhouCodeName: "都市計画法区分",
+  SectionOfToshikeikakuhou: "都市計画法区分コード",
+  OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
+  OwnerFarmIntention: "所有者の農地に関する意向コード",
+  FarmerIndicationNumberHash: "耕作者整理番号",
+  KindOfRightCodeName: "権利の種類",
+  KindOfRight: "権利の種類コード",
+  CommencementDate: "存続期間（始期）",
+  EndStagesDate: "存続期間（終期）",
+  RightSettingContentsCodeName: "農地中間管理権の状況",
+  RightSettingContents: "農地中間管理権コード",
+  UsageSituationInvestigationDate: "利用状況調査日",
+  UsageSituationInvestigationResultCodeName: "遊休農地かどうか",
+  UsageSituationInvestigationResult: "遊休農地コード",
+  UseIntentionInvestigationDate: "利用意向調査日",
+  OwnerStatementIntentSurveyResultsCodeName: "遊休農地の所有者等の意向",
+  OwnerStatementIntentSurveyResults: "遊休農地の所有者等の意向コード",
+  UseIntentionAscertainmentResultCodeName: "所有者等の確知の状況",
+  UseIntentionAscertainmentResult: "所有者等の確知コード",
+  PublicNoticeDate: "公告日",
+  RightOfMiddleManagement: "農地中間管理権裁定日",
+  RecommendationContenDate: "勧告日",
+  ActionOrderDate: "措置命令日",
+  MayorPublicAnnouncementDate: "市町村長公示日",
   Address: "所在地・地番",
   Tiban: "地番",
-  AreaOnRegistry: "登記簿面積（㎡）",
-  ClassificationOfLandCodeName: "地目",
-  FarmCommitteeName: "農業委員会名",
-  OwnerFarmIntentionCodeName: "所有者の意向",
-  UsageSituationInvestigationResultCodeName: "遊休農地判定"
+  SectionOfPolygonCodeName: "ポリゴン区分",
+  SectionOfPolygon: "ポリゴン区分コード",
+  DaichoId: "台帳ID",
+  daicho_shubetsu_cd: "台帳種別コード"
 };
 
 // --- 色定義 ---
@@ -532,3 +565,4 @@ function restorePolygonStyle(lyr) {
   </script>
 </body>
 </html>
+
