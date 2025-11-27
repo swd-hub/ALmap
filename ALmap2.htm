@@ -437,34 +437,26 @@ document.addEventListener("DOMContentLoaded", function() {
     addSvgHatchPattern(); // レイヤー追加時にも念のためSVGハッチングパターンをチェック
   });
 
-// ポリゴンのスタイルを復元・適用する関数 <--- ここに定義されています
+// ポリゴンのスタイルを復元・適用する関数
 function restorePolygonStyle(lyr) {
-  const crop = normalizeCrop(lyr.feature.properties?.SelectedCrop);
-  const style = getPolygonRenderStyle(crop, false); // 選択状態ではない
+  const cropRaw = lyr.feature.properties?.SelectedCrop; // 生の作物名を取得
+  const crop = normalizeCrop(cropRaw); // ここで正規化する
+  const style = getPolygonRenderStyle(cropRaw, false); // getPolygonRenderStyleは内部で再度正規化するので、ここでは生のcropRawを渡す
 
-  const svgElement = lyr.getElement();
-  if (svgElement) {
-    svgElement.classList.remove('legend-hatch');
-    const styleEntry = styleMap[crop];
-    if (styleEntry && styleEntry.hatched) {
-      svgElement.classList.add('legend-hatch');
+  const pathElement = lyr._path; 
+  if (pathElement) {
+    pathElement.setAttribute('stroke', style.stroke);
+    pathElement.setAttribute('stroke-width', style.strokeWidth);
+    pathElement.setAttribute('fill-opacity', style.fillOpacity); 
+
+    if (style.isHatched && cropRaw) { // ハッチングが必要で、かつ作物名が設定されている場合
+      const normalizedId = crop.replace(/[^a-zA-Z0-9_]/g, '_'); // 正規化された名前からIDを作成
+      pathElement.setAttribute('fill', `url(#hatch-pattern-${normalizedId})`);
+    } else {
+      pathElement.setAttribute('fill', style.fill); // 単色を適用
     }
   }
-
-  if (lyr._path) {
-    lyr._path.setAttribute('fill', style.fill);
-    lyr._path.setAttribute('fill-opacity', style.fillOpacity);
-    lyr._path.setAttribute('stroke', style.stroke);
-    lyr._path.setAttribute('stroke-width', style.strokeWidth);
-  } else {
-    lyr.setStyle({
-      color: style.stroke, weight: Number(style.strokeWidth),
-      fillColor: style.fill,
-      fillOpacity: parseFloat(style.fillOpacity)
-    });
-  }
 }
-
 
   document.getElementById("fileInput").addEventListener("change", function(event) {
     const files = event.target.files;
