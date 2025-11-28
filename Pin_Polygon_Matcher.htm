@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoJSON 空間抽出 (追加読み込み対応版)</title>
+    <title>GeoJSON 空間抽出 (ポリゴン＆ピン出力版)</title>
     <style>
         body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
         .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -27,7 +27,7 @@
         input[type="checkbox"] { transform: scale(1.5); margin-right: 10px; }
 
         .btn-group { display: flex; gap: 10px; margin-bottom: 15px; }
-        button { flex: 1; padding: 15px; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; font-weight: bold; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; font-weight: bold; transition: background 0.2s; }
         #runBtn { background: #007bff; color: white; flex: 2; }
         #runBtn:hover { background: #0056b3; }
         #runBtn:disabled { background: #ccc; cursor: not-allowed; }
@@ -35,7 +35,16 @@
         #clearBtn { background: #dc3545; color: white; flex: 1; }
         #clearBtn:hover { background: #a71d2a; }
 
-        textarea { width: 100%; height: 200px; font-family: monospace; border: 1px solid #ccc; padding: 10px; }
+        /* ダウンロードボタンエリア */
+        .download-area { display: none; gap: 10px; margin-top: 15px; }
+        .dl-btn { color: white; display: flex; align-items: center; justify-content: center; flex-direction: column; font-size: 0.95em; }
+        #dlPolyBtn { background: #fd7e14; } /* オレンジ */
+        #dlPolyBtn:hover { background: #e36b0a; }
+        #dlPinBtn { background: #20c997; } /* グリーン */
+        #dlPinBtn:hover { background: #1aa179; }
+        .dl-badge { font-size: 0.8em; opacity: 0.9; font-weight: normal; margin-top: 2px; }
+
+        textarea { width: 100%; height: 150px; font-family: monospace; border: 1px solid #ccc; padding: 10px; margin-top: 10px; font-size: 0.85em; background: #fdfdfd; }
         .status { margin-top: 15px; padding: 10px; border-radius: 5px; display: none; }
         .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
@@ -44,9 +53,9 @@
 <body>
 
 <div class="container">
-    <h1>📍 ピン・ポリゴン 自動判別＆抽出</h1>
-    <p>ファイルを何度でも追加できます。リストに溜めてから「処理実行」を押してください。<br>
-    （ピンとポリゴンは自動で振り分けられます）</p>
+    <h1>📍 ピン・ポリゴン 相互抽出ツール</h1>
+    <p>GeoJSONファイルを読み込み、「ピンが含まれるポリゴン」と「ポリゴン内のピン」を抽出します。<br>
+    （複数ファイルをリストに追加してから実行してください）</p>
 
     <div class="input-group">
         <label>📁 GeoJSONファイルを追加</label>
@@ -69,8 +78,8 @@
             厳密な形状判定を行う (OFF推奨)
         </label>
         <p style="margin: 5px 0 0 30px; font-size: 0.9em; color: #666;">
-            OFF (デフォルト): 四角い範囲(BBox)判定。高速。<br>
-            ON: 正確な形状判定。データ量が多いと遅くなります。
+            OFF (デフォルト): 四角い範囲(BBox)で判定。高速。<br>
+            ON: ポリゴンの詳細な形状で判定。データ量が多いと少し時間がかかります。
         </p>
     </div>
 
@@ -81,17 +90,30 @@
 
     <div id="status" class="status"></div>
 
-    <textarea id="output" readonly placeholder="結果がここに表示されます"></textarea>
-    <button id="dlBtn" onclick="downloadResult()" style="display:none; width:100%; margin-top:10px; background:#28a745; color:white; padding:15px; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">結果をダウンロード</button>
+    <div id="downloadArea" class="download-area">
+        <button id="dlPolyBtn" class="dl-btn" onclick="downloadPoly()">
+            🗺️ ポリゴンをDL
+            <span id="dlPolyCount" class="dl-badge">(0件)</span>
+        </button>
+        <button id="dlPinBtn" class="dl-btn" onclick="downloadPin()">
+            📍 ピンをDL
+            <span id="dlPinCount" class="dl-badge">(0件)</span>
+        </button>
+    </div>
+
+    <textarea id="output" readonly placeholder="処理ログや結果プレビューが表示されます"></textarea>
 </div>
 
 <script>
-    // データを蓄積するグローバル変数
+    // --- グローバル変数 ---
     let storedFeatures = []; 
     let loadedFilesCount = 0;
-    let resultJson = null;
+    
+    // 結果保持用
+    let resultPolyGeoJSON = null;
+    let resultPinGeoJSON = null;
 
-    // ファイル読込処理（Promise）
+    // --- ファイル読込関連 ---
     const readFile = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = e => {
@@ -101,7 +123,6 @@
         reader.readAsText(file);
     });
 
-    // GeoJSON Feature抽出
     const getFeatures = (json) => {
         if (!json) return [];
         if (json.type === 'FeatureCollection' && Array.isArray(json.features)) return json.features;
@@ -110,45 +131,29 @@
         return [];
     };
 
-    // ファイル追加ハンドラ
     async function handleFiles(files) {
         if (!files || files.length === 0) return;
-
         const status = document.getElementById('status');
-        status.style.display = 'none'; // 前のエラーなどを消す
+        status.style.display = 'none';
 
         for (let i = 0; i < files.length; i++) {
             try {
                 const result = await readFile(files[i]);
                 const features = getFeatures(result.data);
-                
-                // 読み込んだFeatureにファイル名の情報を付加して蓄積
-                features.forEach(f => {
-                    // Feature自体に手を加えず、管理用配列に追加
-                    storedFeatures.push(f);
-                });
-                
+                features.forEach(f => storedFeatures.push(f));
                 addToFileListUI(result.name, features);
-                
             } catch (e) {
-                alert(`ファイル「${files[i].name}」の読み込みに失敗しました。\n形式を確認してください。`);
-                console.error(e);
+                alert(`ファイル「${files[i].name}」の読み込み失敗: ${e.message}`);
             }
         }
-
-        // 入力をリセット（同じファイルを再度選べるようにするため）
         document.getElementById('fileInput').value = '';
         updateCountDisplay();
     }
 
-    // UI更新: ファイルリストへの追加
     function addToFileListUI(fileName, features) {
         const list = document.getElementById('fileList');
-        
-        // 初回のみ「ファイルがありません」を消す
         if (loadedFilesCount === 0) list.innerHTML = '';
 
-        // 特徴量の内訳を簡易計算
         let pCount = 0, polyCount = 0;
         features.forEach(f => {
             if (!f.geometry) return;
@@ -169,27 +174,26 @@
         loadedFilesCount++;
     }
 
-    // UI更新: カウント表示
     function updateCountDisplay() {
         const pins = storedFeatures.filter(f => f.geometry && (f.geometry.type === 'Point' || f.geometry.type === 'MultiPoint')).length;
         const polys = storedFeatures.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')).length;
         document.getElementById('countDisplay').textContent = `${loadedFilesCount} ファイル (データ合計 - ピン: ${pins} / ポリゴン: ${polys})`;
     }
 
-    // データクリア
     function clearAllData() {
-        if(!confirm("読み込んだデータをすべて消去しますか？")) return;
+        if(!confirm("データをクリアしますか？")) return;
         storedFeatures = [];
         loadedFilesCount = 0;
-        resultJson = null;
+        resultPolyGeoJSON = null;
+        resultPinGeoJSON = null;
         document.getElementById('fileList').innerHTML = '<li style="color:#999; text-align:center;">まだファイルがありません</li>';
         document.getElementById('countDisplay').textContent = '0 ファイル (ピン: 0 / ポリゴン: 0)';
         document.getElementById('output').value = '';
         document.getElementById('status').style.display = 'none';
-        document.getElementById('dlBtn').style.display = 'none';
+        document.getElementById('downloadArea').style.display = 'none';
     }
 
-    // --- 以下、計算ロジック（前と同じ） ---
+    // --- 幾何計算ロジック ---
 
     const getBBox = (coords, type) => {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -225,84 +229,129 @@
         return false;
     };
 
+    // --- メイン処理 ---
     async function runProcess() {
         const strictMode = document.getElementById('strictMode').checked;
         const status = document.getElementById('status');
         const btn = document.getElementById('runBtn');
-        const dlBtn = document.getElementById('dlBtn');
+        const dlArea = document.getElementById('downloadArea');
+        const outputText = document.getElementById('output');
 
-        if (storedFeatures.length === 0) {
-            alert("データが読み込まれていません。\nファイルを追加してください。");
-            return;
-        }
-
-        // 自動振り分け
+        // データ分類
         const pins = storedFeatures.filter(f => f.geometry && (f.geometry.type === 'Point' || f.geometry.type === 'MultiPoint'));
         const polys = storedFeatures.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
 
-        if (pins.length === 0) { alert("エラー: ピン(Point)のデータが含まれていません。"); return; }
-        if (polys.length === 0) { alert("エラー: ポリゴン(Polygon)のデータが含まれていません。"); return; }
+        if (pins.length === 0 || polys.length === 0) {
+            alert("エラー: ピンまたはポリゴンが不足しています。");
+            return;
+        }
 
         status.style.display = 'block';
         status.className = 'status';
-        status.textContent = "処理中...";
+        status.textContent = "計算中... (データ量により数秒かかります)";
         btn.disabled = true;
+        dlArea.style.display = 'none';
+        outputText.value = "";
 
-        await new Promise(r => setTimeout(r, 50)); // UI描画待ち
+        await new Promise(r => setTimeout(r, 50)); // UI更新待ち
 
         try {
-            const results = [];
-            const pinCoords = [];
-            
-            // ピン座標リスト化
-            pins.forEach(p => {
-                if(p.geometry.type === 'Point') pinCoords.push(p.geometry.coordinates);
-                else if (p.geometry.type === 'MultiPoint') p.geometry.coordinates.forEach(c => pinCoords.push(c));
-            });
+            const matchedPolys = [];
+            const matchedPinSet = new Set(); // 重複防止用 (同じピンが複数ポリゴンに含まれる場合など)
 
-            // 判定ループ
+            // ループ処理
+            // 全ポリゴン × 全ピン を走査 (ポリゴン内のすべてのピンを取得するため、途中でbreakしない)
             for (const poly of polys) {
                 const bbox = getBBox(poly.geometry.coordinates, poly.geometry.type);
-                let keep = false;
-                
-                for (const [px, py] of pinCoords) {
-                    if (px >= bbox.minX && px <= bbox.maxX && py >= bbox.minY && py <= bbox.maxY) {
-                        if (strictMode) {
-                            if (isPointInGeometry([px, py], poly.geometry)) {
-                                keep = true; break;
+                let polyHasPin = false;
+
+                for (const pin of pins) {
+                    // ピンの座標取得 (MultiPointの場合は最初の点のみ簡易判定に使用、厳密には全点ループが必要だが通常Point)
+                    let coordsList = [];
+                    if(pin.geometry.type === 'Point') coordsList.push(pin.geometry.coordinates);
+                    else if(pin.geometry.type === 'MultiPoint') coordsList = pin.geometry.coordinates;
+
+                    for(const pt of coordsList) {
+                        const [px, py] = pt;
+                        
+                        // 1. BBox判定 (高速)
+                        if (px >= bbox.minX && px <= bbox.maxX && py >= bbox.minY && py <= bbox.maxY) {
+                            let isMatch = false;
+                            
+                            // 2. 厳密判定 (またはBBoxのみ)
+                            if (strictMode) {
+                                if (isPointInGeometry(pt, poly.geometry)) isMatch = true;
+                            } else {
+                                isMatch = true;
                             }
-                        } else {
-                            keep = true; break;
+
+                            if (isMatch) {
+                                polyHasPin = true;
+                                matchedPinSet.add(pin); // マッチしたピンを保存
+                                // ここで break すると、「このポリゴンに含まれる他のピン」の判定が漏れる可能性があるため break しない
+                                // (ただし「ポリゴン抽出」だけが目的なら break したほうが高速)
+                                // 今回は「マッチしたピン」も全数出す必要があるため、全探索に近い形になります。
+                            }
                         }
                     }
                 }
-                if (keep) results.push(poly);
+                
+                if (polyHasPin) {
+                    matchedPolys.push(poly);
+                }
             }
 
-            const outGeoJSON = { type: "FeatureCollection", features: results };
-            resultJson = JSON.stringify(outGeoJSON, null, 2);
-            document.getElementById('output').value = resultJson;
-            
+            // 結果作成
+            const matchedPins = Array.from(matchedPinSet);
+
+            resultPolyGeoJSON = JSON.stringify({ type: "FeatureCollection", features: matchedPolys }, null, 2);
+            resultPinGeoJSON = JSON.stringify({ type: "FeatureCollection", features: matchedPins }, null, 2);
+
+            // 完了表示
             status.className = 'status success';
-            status.innerHTML = `✅ 完了! (${strictMode ? "厳密" : "範囲"})\nピン: ${pins.length} / ポリゴン: ${polys.length} → <b>抽出: ${results.length}件</b>`;
-            dlBtn.style.display = 'inline-block';
+            status.innerHTML = `✅ 完了しました!<br>
+                マッチしたポリゴン: <b>${matchedPolys.length}</b> 件<br>
+                エリア内のピン: <b>${matchedPins.length}</b> 件`;
+
+            // ボタン更新
+            document.getElementById('dlPolyCount').textContent = `(${matchedPolys.length}件)`;
+            document.getElementById('dlPinCount').textContent = `(${matchedPins.length}件)`;
+            dlArea.style.display = 'flex';
+
+            // プレビュー表示（簡易）
+            outputText.value = `--- 処理結果サマリー ---\n` +
+                               `判定モード: ${strictMode ? "厳密(Polygon判定)" : "高速(BBox判定)"}\n` +
+                               `元データ: ポリゴン${polys.length}件 / ピン${pins.length}件\n` +
+                               `------------------------\n` +
+                               `【抽出結果】\n` +
+                               `・ポリゴン: ${matchedPolys.length} 件 (ピンを含むエリア)\n` +
+                               `・ピン　　: ${matchedPins.length} 件 (エリア内のポイント)\n\n` +
+                               `(下のボタンからそれぞれのGeoJSONファイルをダウンロードできます)`;
 
         } catch (e) {
             console.error(e);
             status.className = 'status error';
-            status.textContent = "エラー: " + e.message;
+            status.textContent = "エラーが発生しました: " + e.message;
         } finally {
             btn.disabled = false;
         }
     }
 
-    function downloadResult() {
-        if (!resultJson) return;
-        const blob = new Blob([resultJson], {type: "application/geo+json"});
+    // ダウンロード処理
+    function downloadBlob(content, filename) {
+        const blob = new Blob([content], {type: "application/geo+json"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = 'extracted_polygons.geojson';
+        link.download = filename;
         link.click();
+    }
+
+    function downloadPoly() {
+        if (resultPolyGeoJSON) downloadBlob(resultPolyGeoJSON, 'extracted_polygons.geojson');
+    }
+
+    function downloadPin() {
+        if (resultPinGeoJSON) downloadBlob(resultPinGeoJSON, 'extracted_pins.geojson');
     }
 </script>
 
