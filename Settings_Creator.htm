@@ -125,6 +125,7 @@
         <select id="color-type">
             <option value="random">ランダム</option>
             <option value="gradient">濃淡（グラデーション）</option>
+            <option value="rainbow">🌈 レインボー</option>
         </select>
 
         <label for="color-system">系統色:</label>
@@ -207,6 +208,10 @@ function getGradientColor(index, total, system) {
         case 'blue': h = 240; break;
         case 'green': h = 120; break;
         case 'yellow': h = 60; break;
+        case 'rainbow': // ★ 追加: レインボーの場合
+            h = (index / total) * 360;
+            s = 90; // レインボーでは彩度を高く保つ
+            break;
         case 'any':
         default:
              h = (index / total) * 360; 
@@ -218,11 +223,18 @@ function getGradientColor(index, total, system) {
     const maxV = 100; // 元: 80 -> 最も明るい色 (100%)
     const minV = 20;  // 元: 30 -> 最も暗い色 (20%)
     
-    let v = maxV - (maxV - minV) * (index / Math.max(1, total - 1));
+    // レインボー選択時、明度は中央値(60)付近に固定し、濃淡変化を抑える
+    let v;
+    if (system === 'rainbow') {
+        v = 70; // 明るすぎず暗すぎない値に固定
+    } else {
+        // 濃淡選択時
+        v = maxV - (maxV - minV) * (index / Math.max(1, total - 1));
+    }
     v = Math.round(v);
 
     // HSVをRGBに変換する関数
-    function hsvToRgb(h, s, v) {
+function hsvToRgb(h, s, v) {
         s /= 100;
         v /= 100;
         let c = v * s;
@@ -249,7 +261,8 @@ function getGradientColor(index, total, system) {
 function regenerateColors() {
     const rows = tbody.querySelectorAll('tr');
     const colorType = colorTypeSelect.value;
-    const colorSystem = colorSystemSelect.value;
+    const colorSystem = colorSystemSelect.value; // 濃淡選択時に使う
+
     const total = rows.length;
 
     rows.forEach((row, index) => {
@@ -259,7 +272,9 @@ function regenerateColors() {
 
         if (colorType === 'random') {
             newColor = getRandomColor('any'); 
-        } else { 
+        } else if (colorType === 'rainbow') { // ★ 追加: レインボーの場合
+            newColor = getGradientColor(index, total, 'rainbow');
+        } else { // gradient (濃淡)
             newColor = getGradientColor(index, total, colorSystem);
         }
 
@@ -267,7 +282,6 @@ function regenerateColors() {
         colorPreview.style.backgroundColor = newColor;
     });
 }
-
 
 // --- DOM操作関数 ---
 
