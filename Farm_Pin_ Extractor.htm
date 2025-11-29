@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin (Point) GeoJSON マージ & 住所フィルタリングツール</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        h1 {
+            color: #d35400; /* ピンっぽい色（オレンジ/赤系） */
+            text-align: center;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .step {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .step:last-child {
+            border-bottom: none;
+        }
+        h2 {
+            font-size: 1.2em;
+            color: #e67e22; /* ピンっぽい色 */
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #fafafa;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="file"]:hover {
+            border-color: #e67e22;
+            background: #fffdfa;
+        }
+        button {
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #d35400;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        textarea {
+            width: 100%;
+            height: 250px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+            white-space: pre-wrap; /* 改行を有効にする */
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .stats {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        #fileList {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+            font-size: 0.9em;
+            color: #555;
+        }
+        #fileList li {
+            margin-bottom: 3px;
+        }
+        #clearFilesBtn { /* 新規追加ボタンのスタイル */
+            background-color: #95a5a6;
+            margin-top: 5px;
+        }
+        #clearFilesBtn:hover {
+            background-color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Pin (Point) GeoJSON マージ & 住所フィルタリング</h1>
+        <p>複数のGeoJSONファイルを結合し、重複を除去した後、指定されたCSVの住所でフィルタリングします。</p>
+
+        <div class="step">
+            <h2>1. GeoJSONファイル選択 (追加入力可)</h2>
+            <label for="files">GeoJSONファイル (.json, .geojson):</label>
+            <p class="stats" style="margin-bottom: 5px;">※ ファイルを選択するたびにリストに追加されます。**Ctrl/Shiftキーで複数選択も可能**です。</p>
+            <input type="file" id="files" accept=".json,.geojson" multiple onchange="addFiles()">
+            <ul id="fileList"></ul>
+            <button onclick="clearGeoJsonFiles()" id="clearFilesBtn">全ファイルクリア</button>
+        </div>
+        
+        <div class="step">
+            <h2>1.5. フィルタリング用CSV選択 (オプション)</h2>
+            <label for="csvFile">フィルタリングする住所リストCSV (.csv):</label>
+            <p class="stats">
+                ※ CSVはヘッダーなし、**1行目から住所データ（1列目）**として読み込みます。<br>
+                ※ GeoJSON FeatureのProperties内の値に、この住所が**部分一致**する場合にピンが出力されます。<br>
+                ※ 未選択の場合は全ユニークピンを出力。
+            </p>
+            <input type="file" id="csvFile" accept=".csv" onchange="updateCsvStatus()">
+            <p id="csvStatus" class="stats"></p>
+        </div>
+
+        <div class="step">
+            <h2>2. 処理実行</h2>
+            <p class="stats">※「緯度経度」と「属性(プロパティ)」の両方が完全に一致するピンを同一とみなします。</p>
+            <button onclick="processFiles()" id="processBtn">マージ・重複削除 & フィルタリング実行</button>
+            <div id="statusMessage" class="message"></div>
+        </div>
+
+        <div class="step">
+            <h2>3. 結果出力</h2>
+            <textarea id="outputArea" readonly placeholder="ここに処理結果が表示されます..."></textarea>
+            <button onclick="downloadResult()" id="downloadBtn" style="display:none; background-color: #28a745; margin-top: 10px;">ダウンロード (filtered_unique_points.geojson)</button>
+        </div>
+    </div>
+
+    <script>
+        let mergedResultString = "";
+        let uploadedGeoJsonFiles = []; // 選択された全GeoJSONファイルを保持するグローバル変数
+
+        // 0. GeoJSONファイルを追加入力する関数 (onchangeイベントから呼び出し)
+        function addFiles() {
+            const input = document.getElementById('files');
+            // 新しく選択されたファイルをリストに追加
+            uploadedGeoJsonFiles = uploadedGeoJsonFiles.concat(Array.from(input.files));
+            
+            // ファイル入力フィールドをクリア（同じファイルを再度選択可能にするため）
+            input.value = null; 
+
+            updateFileList();
+        }
+
+        // 1. ファイルリスト表示の更新
+        function updateFileList() {
+            const list = document.getElementById('fileList');
+            list.innerHTML = '';
+            
+            if (uploadedGeoJsonFiles.length > 0) {
+                // ファイルリストの表示
+                uploadedGeoJsonFiles.forEach(file => {
+                    const li = document.createElement('li');
+                    li.textContent = `📍 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                    list.appendChild(li);
+                });
+
+                // 合計数の表示
+                const totalLi = document.createElement('li');
+                totalLi.innerHTML = `--- <strong>合計 ${uploadedGeoJsonFiles.length} ファイルを選択済み</strong> ---`;
+                list.appendChild(totalLi);
+            } else {
+                const li = document.createElement('li');
+                li.textContent = `ファイルが選択されていません。`;
+                list.appendChild(li);
+            }
+        }
+
+        // 選択されたGeoJSONファイルをクリアする関数
+        function clearGeoJsonFiles() {
+            uploadedGeoJsonFiles = [];
+            updateFileList();
+        }
+
+        // CSVファイル選択状態の更新 (変更なし)
+        function updateCsvStatus() {
+            const input = document.getElementById('csvFile');
+            const status = document.getElementById('csvStatus');
+            
+            if (input.files.length > 0) {
+                status.textContent = `✅ CSVファイル: ${input.files[0].name} が選択されました。`;
+            } else {
+                status.textContent = `(CSVフィルタリングは使用しません)`;
+            }
+        }
+
+        // 2. 正規化文字列変換（オブジェクトのキー順序に依存しない比較用） (変更なし)
+        function consistentStringify(obj) {
+            if (obj === null || typeof obj !== 'object') {
+                return JSON.stringify(obj);
+            }
+            
+            if (Array.isArray(obj)) {
+                return '[' + obj.map(item => consistentStringify(item)).join(',') + ']';
+            }
+            
+            const sortedKeys = Object.keys(obj).sort();
+            const parts = sortedKeys.map(key => {
+                return JSON.stringify(key) + ':' + consistentStringify(obj[key]);
+            });
+            return '{' + parts.join(',') + '}';
+        }
+
+        // 3. CSV読み込み・住所抽出 (変更なし)
+        async function loadCsvAddresses(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const text = e.target.result;
+                        const lines = text.trim().split(/\r?\n/);
+                        if (lines.length === 0 || (lines.length === 1 && lines[0].trim() === '')) {
+                             return resolve([]);
+                        }
+                        
+                        const addresses = [];
+                        for (let i = 0; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (line !== '') {
+                                const value = line.split(',')[0].trim();
+                                
+                                if (value !== '') {
+                                    addresses.push(value.replace(/[\s　]+/g, ''));
+                                }
+                            }
+                        }
+                        resolve(addresses.filter((v, i, a) => a.indexOf(v) === i)); 
+                    } catch (err) {
+                        reject(`CSVファイルの解析中にエラーが発生しました: ${err.message}`);
+                    }
+                };
+                reader.onerror = () => reject("CSVファイルの読み込みに失敗しました。");
+                reader.readAsText(file); 
+            });
+        }
+
+        // 4. メイン処理実行 (GeoJSONファイルの参照先を修正)
+        async function processFiles() {
+            const csvInput = document.getElementById('csvFile');
+            const statusDiv = document.getElementById('statusMessage');
+            const outputArea = document.getElementById('outputArea');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const processBtn = document.getElementById('processBtn');
+
+            // ★修正: グローバル変数のファイルリストを参照★
+            const filesToProcess = uploadedGeoJsonFiles; 
+
+            if (filesToProcess.length === 0) {
+                alert("GeoJSONファイルを選択してください。");
+                return;
+            }
+
+            processBtn.disabled = true;
+            processBtn.textContent = "処理中...";
+            statusDiv.style.display = 'none';
+            outputArea.value = "";
+            downloadBtn.style.display = "none";
+
+            try {
+                // --- A. GeoJSONファイルの読み込みとマージ/ユニーク化 ---
+                let allFeatures = [];
+
+                // GeoJSON読み込み（Promise.allで並列実行）
+                const filePromises = filesToProcess.map(file => { // ★修正: filesToProcessを参照★
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => {
+                            try {
+                                const json = JSON.parse(e.target.result);
+                                resolve(json);
+                            } catch (err) {
+                                reject(`GeoJSONファイル「${file.name}」は有効なJSONではありません。`);
+                            }
+                        };
+                        reader.onerror = () => reject(`GeoJSONファイル「${file.name}」の読み込みに失敗しました。`);
+                        reader.readAsText(file);
+                    });
+                });
+
+                const results = await Promise.all(filePromises);
+
+                // Featureの収集
+                results.forEach(data => {
+                    if (data.type === "FeatureCollection" && Array.isArray(data.features)) {
+                        allFeatures = allFeatures.concat(data.features);
+                    } else if (data.type === "Feature") {
+                        allFeatures.push(data);
+                    }
+                });
+
+                const totalInputCount = allFeatures.length;
+
+                // ユニーク化処理
+                const uniqueFeatures = [];
+                const seenSignatures = new Set();
+                allFeatures.forEach(feature => {
+                    if (feature.geometry && feature.geometry.type === "Point") {
+                        const geomStr = consistentStringify(feature.geometry);
+                        const propStr = consistentStringify(feature.properties);
+                        const signature = `${geomStr}|${propStr}`;
+
+                        if (!seenSignatures.has(signature)) {
+                            seenSignatures.add(signature);
+                            uniqueFeatures.push(feature);
+                        }
+                    }
+                });
+
+                const uniqueCount = uniqueFeatures.length;
+                const removedCount = totalInputCount - uniqueCount;
+                let finalFeatures = uniqueFeatures;
+                let filterStats = "";
+
+                // --- B. CSVファイルによるフィルタリング処理 (変更なし) ---
+                if (csvInput.files.length > 0) {
+                    const csvFile = csvInput.files[0];
+                    const filteringAddresses = await loadCsvAddresses(csvFile);
+
+                    if (filteringAddresses.length > 0) {
+                        const filteredCountBefore = finalFeatures.length;
+
+                        finalFeatures = finalFeatures.filter(feature => {
+                            const properties = feature.properties || {};
+                            
+                            const allPropsString = Object.values(properties)
+                                .map(v => String(v || ''))
+                                .join('|')
+                                .replace(/[\s　]+/g, ''); 
+
+                            return filteringAddresses.some(addr => {
+                                return allPropsString.includes(addr);
+                            });
+                        });
+
+                        const filteredCountAfter = finalFeatures.length;
+                        filterStats = ` (CSVフィルタリング件数: ${filteringAddresses.length}件、${filteredCountBefore} → 最終 ${filteredCountAfter}件)`;
+                    } else {
+                        filterStats = " (CSVから有効な住所が見つからなかったため、フィルタリングは実行されませんでした)";
+                    }
+                }
+
+                // --- C. 結果出力 ---
+                const resultGeoJSON = {
+                    type: "FeatureCollection",
+                    features: finalFeatures
+                };
+
+                mergedResultString = JSON.stringify(resultGeoJSON, null, 2);
+                outputArea.value = mergedResultString;
+                
+                statusDiv.textContent = `✅ 処理完了: ${filesToProcess.length}ファイルを結合しました。\n` + // ★修正: filesToProcessを参照★
+                                        `合計ピン数: ${totalInputCount} → ユニーク化: ${uniqueCount} (重複削除: ${removedCount})${filterStats}`;
+                statusDiv.className = "message success";
+                statusDiv.style.display = "block";
+                downloadBtn.style.display = "block";
+                downloadBtn.textContent = `ダウンロード (${resultGeoJSON.features.length}件)`;
+
+            } catch (error) {
+                statusDiv.textContent = "❌ エラー: " + error;
+                statusDiv.className = "message error";
+                statusDiv.style.display = "block";
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "マージ・重複削除 & フィルタリング実行";
+            }
+        }
+
+        // 5. ダウンロード (変更なし)
+        function downloadResult() {
+            if (!mergedResultString) return;
+
+            const blob = new Blob([mergedResultString], { type: "application/geo+json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "filtered_unique_points.geojson";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 最初のロード時にファイルリストを初期化
+        updateFileList(); 
+    </script>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV作成補助ツール</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        /* 設定エリアのスタイル */
+        #settings {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background-color: #e3f2fd;
+        }
+        #settings label {
+            font-weight: bold;
+            display: inline-block;
+            margin-right: 10px;
+            color: #1a237e;
+        }
+        #settings select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            margin-right: 20px;
+        }
+        /* テーブルのスタイル */
+        #data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        #data-table th, #data-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        #data-table th {
+            background-color: #4db6ac;
+            color: white;
+        }
+        #data-table input[type="text"], #data-table input[type="color"] {
+            width: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        #data-table input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        /* ボタンのスタイル */
+        .controls button {
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #add-row-btn {
+            background-color: #66bb6a;
+            color: white;
+        }
+        #add-row-btn:hover {
+            background-color: #43a047;
+        }
+        /* 削除ボタン（各行用） */
+        .delete-row-btn {
+            background-color: #ef5350;
+            color: white;
+            padding: 8px 12px;
+            font-size: 0.9em;
+            margin-left: 5px;
+        }
+        .delete-row-btn:hover {
+            background-color: #e53935;
+        }
+        #download-btn {
+            background-color: #29b6f6;
+            color: white;
+            float: right;
+        }
+        #download-btn:hover {
+            background-color: #039be5;
+        }
+        .color-preview {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+            margin-left: 5px;
+            border: 1px solid #999;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>CSV作成補助ツール</h1>
+
+    <div id="settings">
+        <h2>🎨 色系統設定</h2>
+        <label for="color-type">色の種類:</label>
+        <select id="color-type">
+            <option value="random">ランダム</option>
+            <option value="gradient">濃淡（グラデーション）</option>
+            <option value="rainbow">🌈 レインボー</option>
+        </select>
+
+        <label for="color-system">系統色:</label>
+        <select id="color-system">
+            <option value="any">任意の色（濃淡設定時のみ影響）</option>
+            <option value="red">赤系統</option>
+            <option value="blue">青系統</option>
+            <option value="green">緑系統</option>
+            <option value="yellow">黄色系統</option>
+        </select>
+
+        <button onclick="regenerateColors()">🌈 色を再生成</button>
+    </div>
+
+    <div class="controls">
+        <button id="add-row-btn" onclick="addRow()">➕ 行を追加</button>
+        <button id="download-btn" onclick="downloadCSV()">⬇️ CSVダウンロード</button>
+    </div>
+
+    <table id="data-table">
+        <thead>
+            <tr>
+                <th>名称 (name)</th>
+                <th>色 (color)</th>
+                <th>ハッチング (hatched)</th>
+                <th>操作</th> 
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+</div>
+
+<script>
+// 初期データ
+const initialData = [
+    { name: "水田", color: "#81d4fa", hatched: false },
+    { name: "畑", color: "#ffcc80", hatched: false },
+    { name: "果樹園", color: "#a5d6a7", hatched: false },
+    { name: "ハウス", color: "#eeeeee", hatched: true },
+    { name: "その他", color: "#bdbdbd", hatched: true }
+];
+
+const tbody = document.querySelector('#data-table tbody');
+const colorTypeSelect = document.getElementById('color-type');
+const colorSystemSelect = document.getElementById('color-system');
+
+// --- カラー関連関数 ---
+
+function getRandomColor(system = 'any') {
+    let r, g, b;
+    const max = 255;
+    const low = 100;
+
+    switch (system) {
+        case 'red': r = max; g = Math.floor(Math.random() * low); b = Math.floor(Math.random() * low); break;
+        case 'blue': r = Math.floor(Math.random() * low); g = Math.floor(Math.random() * low); b = max; break;
+        case 'green': r = Math.floor(Math.random() * low); g = max; b = Math.floor(Math.random() * low); break;
+        case 'yellow': r = max; g = max; b = Math.floor(Math.random() * low); break;
+        case 'any': default:
+            r = Math.floor(Math.random() * (max + 1));
+            g = Math.floor(Math.random() * (max + 1));
+            b = Math.floor(Math.random() * (max + 1));
+            break;
+    }
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+}
+
+/**
+ * HSV（色相、彩度、明度）に基づいて、指定された系統色の濃淡を生成
+ * 濃淡差のレンジを拡大 (100% ～ 20%)
+ */
+function getGradientColor(index, total, system) {
+    let h; 
+    let s = 90; // 彩度も少し上げて色味をはっきりさせる (80 -> 90)
+    
+    // 系統色に基づいて色相を設定
+    switch (system) {
+        case 'red': h = 0; break;
+        case 'blue': h = 240; break;
+        case 'green': h = 120; break;
+        case 'yellow': h = 60; break;
+        case 'rainbow': // ★ 追加: レインボーの場合
+            h = (index / total) * 360;
+            s = 90; // レインボーでは彩度を高く保つ
+            break;
+        case 'any':
+        default:
+             h = (index / total) * 360; 
+             s = 80;
+             break;
+    }
+
+    // 明度 (V) の範囲を拡大して濃淡差を大きくする
+    const maxV = 100; // 元: 80 -> 最も明るい色 (100%)
+    const minV = 20;  // 元: 30 -> 最も暗い色 (20%)
+    
+    // レインボー選択時、明度は中央値(60)付近に固定し、濃淡変化を抑える
+    let v;
+    if (system === 'rainbow') {
+        v = 70; // 明るすぎず暗すぎない値に固定
+    } else {
+        // 濃淡選択時
+        v = maxV - (maxV - minV) * (index / Math.max(1, total - 1));
+    }
+    v = Math.round(v);
+
+    // HSVをRGBに変換する関数
+function hsvToRgb(h, s, v) {
+        s /= 100;
+        v /= 100;
+        let c = v * s;
+        let x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        let m = v - c;
+        let r, g, b;
+
+        if (h >= 0 && h < 60) { r = c; g = x; b = 0; }
+        else if (h >= 60 && h < 120) { r = x; g = c; b = 0; }
+        else if (h >= 120 && h < 180) { r = 0; g = c; b = x; }
+        else if (h >= 180 && h < 240) { r = 0; g = x; b = c; }
+        else if (h >= 240 && h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+
+        return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+    }
+
+    const [r, g, b] = hsvToRgb(h, s, v).map(val => Math.round(val));
+
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+}
+
+
+function regenerateColors() {
+    const rows = tbody.querySelectorAll('tr');
+    const colorType = colorTypeSelect.value;
+    const colorSystem = colorSystemSelect.value; // 濃淡選択時に使う
+
+    const total = rows.length;
+
+    rows.forEach((row, index) => {
+        const colorInput = row.querySelector('.color-input');
+        const colorPreview = row.querySelector('.color-preview');
+        let newColor;
+
+        if (colorType === 'random') {
+            newColor = getRandomColor('any'); 
+        } else if (colorType === 'rainbow') { // ★ 追加: レインボーの場合
+            newColor = getGradientColor(index, total, 'rainbow');
+        } else { // gradient (濃淡)
+            newColor = getGradientColor(index, total, colorSystem);
+        }
+
+        colorInput.value = newColor;
+        colorPreview.style.backgroundColor = newColor;
+    });
+}
+
+// --- DOM操作関数 ---
+
+function addRow(data = { name: '', color: '', hatched: false }) {
+    const newRow = tbody.insertRow();
+    const currentIndex = tbody.rows.length - 1; 
+
+    let autoColor = data.color;
+    if (!autoColor) {
+        const colorType = colorTypeSelect.value;
+        const colorSystem = colorSystemSelect.value;
+        const total = tbody.rows.length;
+
+        if (colorType === 'random') {
+            autoColor = getRandomColor('any');
+        } else {
+            autoColor = getGradientColor(currentIndex, total, colorSystem);
+        }
+    }
+    
+    data.color = autoColor;
+
+    // 1. 名称 (name)
+    const nameCell = newRow.insertCell();
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = data.name;
+    nameInput.placeholder = '例: 水田';
+    nameInput.className = 'name-input';
+    nameCell.appendChild(nameInput);
+
+    // 2. 色 (color)
+    const colorCell = newRow.insertCell();
+    const colorInput = document.createElement('input');
+    colorInput.type = 'text';
+    colorInput.value = data.color;
+    colorInput.className = 'color-input';
+    
+    const colorPicker = document.createElement('input');
+    colorPicker.type = 'color';
+    colorPicker.value = data.color;
+    colorPicker.style.width = '0px';
+    colorPicker.style.height = '0px';
+    colorPicker.style.opacity = '0';
+    colorPicker.style.position = 'absolute';
+    
+    const colorPreview = document.createElement('span');
+    colorPreview.className = 'color-preview';
+    colorPreview.style.backgroundColor = data.color;
+    
+    colorPicker.addEventListener('input', (e) => {
+        colorInput.value = e.target.value.toUpperCase();
+        colorPreview.style.backgroundColor = e.target.value;
+    });
+    
+    colorInput.addEventListener('input', (e) => {
+        const hex = e.target.value.toUpperCase();
+        if (/^#?([0-9A-F]{3}){1,2}$/.test(hex)) {
+            colorPicker.value = (hex.startsWith('#') ? '' : '#') + hex;
+            colorPreview.style.backgroundColor = colorPicker.value;
+        }
+    });
+
+    colorPreview.addEventListener('click', () => colorPicker.click());
+    colorInput.addEventListener('click', () => colorPicker.click());
+
+
+    colorCell.appendChild(colorInput);
+    colorCell.appendChild(colorPicker);
+    colorCell.appendChild(colorPreview);
+
+
+    // 3. ハッチング (hatched)
+    const hatchedCell = newRow.insertCell();
+    const hatchedInput = document.createElement('input');
+    hatchedInput.type = 'checkbox';
+    hatchedInput.checked = data.hatched;
+    hatchedInput.className = 'hatched-input';
+    hatchedCell.appendChild(hatchedInput);
+
+    // 4. 操作 (削除ボタン)
+    const actionCell = newRow.insertCell();
+    const deleteButton = document.createElement('button');
+    deleteButton.textContent = '削除';
+    deleteButton.className = 'delete-row-btn';
+    deleteButton.onclick = () => {
+        newRow.remove();
+        if (colorTypeSelect.value === 'gradient') {
+            regenerateColors();
+        }
+    };
+    actionCell.appendChild(deleteButton);
+}
+
+/**
+ * テーブルデータをCSV形式に変換してダウンロードする (Blob使用による修正版)
+ * #記号などが含まれていても途切れないようにしています。
+ */
+function downloadCSV() {
+    const rows = tbody.querySelectorAll('tr');
+    let csvContent = "";
+    
+    // ヘッダー行
+    const header = ['name', 'color', 'hatched'];
+    csvContent += header.join(',') + '\r\n';
+
+    // データ行
+    rows.forEach(row => {
+        const name = row.querySelector('.name-input').value.trim();
+        const color = row.querySelector('.color-input').value.trim();
+        const hatched = row.querySelector('.hatched-input').checked;
+
+        // 値にカンマが含まれる場合のみダブルクォーテーションで囲む
+        const safeName = name.includes(',') ? `"${name}"` : name;
+        const safeColor = color.includes(',') ? `"${color}"` : color;
+
+        const csvRow = [
+            safeName,
+            safeColor,
+            hatched 
+        ].join(',');
+        
+        csvContent += csvRow + '\r\n';
+    });
+
+    // Blobを使ってダウンロードリンクを作成 (「#」対策)
+    // BOM付加でExcelでの文字化けも防止
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "data_output.csv");
+    document.body.appendChild(link); 
+    link.click();
+    document.body.removeChild(link);
+}
+
+// --- 初期化 ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    initialData.forEach(data => addRow(data));
+    
+    colorTypeSelect.addEventListener('change', () => {
+        if (colorTypeSelect.value === 'gradient') {
+            regenerateColors();
+        }
+    });
+    
+    colorSystemSelect.addEventListener('change', regenerateColors);
+});
+
+</script>
+
+</body>
+</html>

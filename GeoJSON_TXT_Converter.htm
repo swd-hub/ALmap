@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GeoJSON ⇔ TXT 一括変換</title>
+<style>
+    /* ベースデザイン (統一) */
+    body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+    .container { max-width: 700px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+
+    /* ヘッダー */
+    h2 { 
+        color: #d63384; 
+        text-align: center; 
+        border-bottom: 2px solid #d63384; 
+        padding-bottom: 10px; 
+        margin-bottom: 20px; 
+    }
+
+    /* ファイル選択 */
+    input[type="file"] {
+        display: block;
+        margin: 0 auto 20px auto;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fafafa;
+        cursor: pointer;
+    }
+
+    /* ボタンスタイル */
+    button {
+        background: #007bff; 
+        color: white; 
+        border: none; 
+        padding: 10px 20px; 
+        border-radius: 5px; 
+        font-weight: bold; 
+        cursor: pointer; 
+        margin: 5px;
+        transition: background 0.2s;
+    }
+    button:hover { background: #0056b3; }
+
+    /* レイアウト調整 */
+    .btn-area { text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h2>GeoJSON ⇔ TXT 一括変換ツール</h2>
+  <input type="file" id="fileInput" multiple />
+  <div class="btn-area">
+    <button id="toTxt">選択ファイルを .txt に変換</button>
+    <button id="toGeojson">選択ファイルを .geojson に変換</button>
+  </div>
+</div>
+
+<script>
+  function downloadWithNewExt(file, newExt) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const newName = file.name.replace(/\.+$/, '') + '.' + newExt;
+      const blob = new Blob([reader.result], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = newName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function batchConvert(newExt) {
+    const files = document.getElementById('fileInput').files;
+    if (!files.length) {
+      alert('ファイルを選択してください');
+      return;
+    }
+    for (const file of files) {
+      downloadWithNewExt(file, newExt);
+    }
+  }
+
+  document.getElementById('toTxt').onclick = () => batchConvert('txt');
+  document.getElementById('toGeojson').onclick = () => batchConvert('geojson');
+</script>
+</body>
+</html>

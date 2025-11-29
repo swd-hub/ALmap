@@ -30,7 +30,7 @@
 <body>
     <div class="container">
         <h1>🗺️ GeoJSON 地域別抽出（BBox空間照合）＆ダウンロードツール</h1>
-        <p>ピンとポリゴンのGeoJSONファイル (`.geojson`, `.json`) をアップロードし、地域を選択することで、**選択した地域のピンの座標範囲 (BBox)** と**交差するポリゴン**を抽出・ダウンロードします。</p>
+        <p>ピンとポリゴンのGeoJSONファイル (`.geojson`, `.json`) をアップロードし、地域を選択することで、**選択した地域のピンが含まれるポリゴン（BBox判定）**を抽出・ダウンロードします。</p>
 
         <div id="file-input">
             <input type="file" id="geojsonFileInput" accept=".geojson,.json" multiple>
@@ -163,27 +163,6 @@
         }
 
         /**
-         * [NEW] 複数のPointフィーチャーから、それらを包含するBBox [minLng, minLat, maxLng, maxLat] を計算する。
-         */
-        function calculatePinBBox(pinFeatures) {
-            let minLng = Infinity, maxLng = -Infinity;
-            let minLat = Infinity, maxLat = -Infinity;
-
-            pinFeatures.forEach(f => {
-                if (f.geometry && f.geometry.type === 'Point' && f.geometry.coordinates) {
-                    const [lng, lat] = f.geometry.coordinates;
-                    minLng = Math.min(minLng, lng);
-                    maxLng = Math.max(maxLng, lng);
-                    minLat = Math.min(minLat, lat);
-                    maxLat = Math.max(maxLat, lat);
-                }
-            });
-
-            if (minLng === Infinity) return null;
-            return [minLng, minLat, maxLng, maxLat];
-        }
-
-        /**
          * [NEW] Polygon/MultiPolygonフィーチャーから、そのフィーチャーを包含するBBoxを計算する。
          * BBox: [minLng, minLat, maxLng, maxLat]
          */
@@ -213,21 +192,6 @@
             if (minLng === Infinity) return null;
             return [minLng, minLat, maxLng, maxLat];
         }
-
-        /**
-         * [NEW] 2つのBBoxが交差するかどうかを判定する。
-         * bbox: [minLng, minLat, maxLng, maxLat]
-         */
-        function checkBBoxIntersection(bbox1, bbox2) {
-            const [minLng1, minLat1, maxLng1, maxLat1] = bbox1;
-            const [minLng2, minLat2, maxLng2, maxLat2] = bbox2;
-
-            return maxLng1 >= minLng2 && 
-                   minLng1 <= maxLng2 &&
-                   maxLat1 >= minLat2 &&
-                   minLat1 <= maxLat2;
-        }
-
 
         // -----------------------------------------------------------
         // 3. メイン処理関数
@@ -365,27 +329,38 @@
             // 1. 選択された地域のピンデータ（地域フィルター済）を取得
             const selectedPins = group.pin;
 
-            // 2. 選択されたピンフィーチャからBBox（検索範囲）を計算
-            const pinBBox = calculatePinBBox(selectedPins); 
+            // --------------------------------------------------------
+            // 修正箇所: 全体BBoxではなく、個別のピン座標を使って判定する
+            // --------------------------------------------------------
+            
+            // ピンの座標リストを作成（高速化のため）
+            const pinCoords = selectedPins.map(p => p.geometry.coordinates);
 
             let matchedPolygons = [];
             let bboxStatusMessage = "";
 
-            if (!pinBBox) {
-                // Pinから有効な座標を抽出できなかった場合
-                bboxStatusMessage = `⚠️ ピン ${selectedPins.length} 件から有効な座標を抽出できませんでした。`;
-                // MatchedPolygonsは空のまま
+            if (pinCoords.length === 0) {
+                bboxStatusMessage = `⚠️ ピンが0件のため抽出できませんでした。`;
             } else {
-                // 3. 全ポリゴンフィーチャから、ピンBBoxと交差するもののみを抽出 (空間照合ロジック)
-                matchedPolygons = allUniquePolyFeatures.filter(f => {
-                    const polyBBox = getFeatureBBox(f);
+                // 全ポリゴンを走査
+                matchedPolygons = allUniquePolyFeatures.filter(poly => {
+                    // そのポリゴンのBBoxを計算
+                    const polyBBox = getFeatureBBox(poly); 
+                    if (!polyBBox) return false;
                     
-                    // ポリゴンに有効なBBoxがあり、かつピンのBBoxと交差する場合に抽出
-                    return polyBBox && checkBBoxIntersection(pinBBox, polyBBox);
+                    const [minX, minY, maxX, maxY] = polyBBox;
+
+                    // 選択された地域のピンのうち、ひとつでもこのポリゴンのBBox内にあるか？
+                    // (これにより、離れた地域のポリゴンが除外されます)
+                    return pinCoords.some(([px, py]) => {
+                        return px >= minX && px <= maxX && py >= minY && py <= maxY;
+                    });
                 });
                 
-                bboxStatusMessage = `🗺️ 検索 BBox: 経度 ${pinBBox[0].toFixed(5)}～${pinBBox[2].toFixed(5)}, 緯度 ${pinBBox[1].toFixed(5)}～${pinBBox[3].toFixed(5)}`;
+                bboxStatusMessage = `✅ 個別ピンの座標でポリゴン(BBox)を検索しました`;
             }
+
+            // --------------------------------------------------------
 
             // 4. グループ変数に結果を格納
             currentSelectedGroup.pin = selectedPins; 
