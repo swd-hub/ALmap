@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON (Polygon) to CSV Converter</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box; /* Paddingとborderをwidthに含める */
+            resize: vertical;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-top: 5px; /* スペース調整 */
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:active {
+            background-color: #004085;
+        }
+        .output-section {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .output-section h2 {
+            color: #007bff;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #message {
+            color: red;
+            margin-top: 10px;
+        }
+        .note {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GeoJSON (Polygon) から CSV への変換</h1>
+
+        <p>GeoJSONデータをご入力またはファイルを選択し、「CSVに変換」ボタンをクリックしてください。</p>
+        <p class="note">ご提示いただいたGeoJSONデータは、入力テキストエリアに初期値として設定されています。</p>
+
+        <label for="geojsonInput">GeoJSONデータ:</label>
+        <textarea id="geojsonInput" placeholder="GeoJSONデータをここに貼り付けてください..."></textarea>
+
+        <label for="geojsonFile">または GeoJSONファイルを選択:</label>
+        <input type="file" id="geojsonFile" accept=".json,.geojson">
+
+        <button onclick="convertToCsv()">CSVに変換</button>
+        <p id="message"></p>
+
+        <div class="output-section">
+            <h2>CSV出力</h2>
+            <textarea id="csvOutput" readonly></textarea>
+            <button onclick="downloadCsv()" id="downloadButton" style="display: none;">CSVをダウンロード</button>
+        </div>
+    </div>
+
+    <script>
+        // 生成されたCSVデータを保持するグローバル変数
+        let currentCsvString = '';
+        let currentInputFileName = 'geojson_data.geojson'; // ダウンロード用ファイル名の初期値
+
+        // ユーザーが提供したGeoJSON（末尾を補完し整形したもの）
+        const initialGeojson = `{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.837277024,35.405649546],[132.836965853,35.406296584],[132.836966731,35.406296622],[132.837309929,35.406287449],[132.837381747,35.405950986],[132.83757825,35.405973362],[132.837661881,35.405792909],[132.837653198,35.405768283],[132.837277024,35.405649546]]]},"properties":{"polygon_uuid":"02f81000-d451-49ef-b6fb-00d8e0c0dd38","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.843129664,35.404679877],[132.8435191,35.404776545],[132.843532911,35.404721209],[132.843498108,35.404704709],[132.84346684,35.404623081],[132.843168549,35.404552966],[132.843142182,35.404569808],[132.843129664,35.404679877]]]},"properties":{"polygon_uuid":"35175c86-ed3a-43b4-b032-00f719aa1f1b","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.850202187,35.405175115],[132.849462187,35.404869845],[132.849324637,35.405101157],[132.849331718,35.405112556],[132.849515887,35.405190706],[132.849638629,35.405243559],[132.849800616,35.405312371],[132.84989006,35.405354174],[132.849957615,35.40538551],[132.850056597,35.405426596],[132.850196538,35.405185328],[132.850202187,35.405175115]]]},"properties":{"polygon_uuid":"7a69e254-5bc9-44e5-86c0-01e7c3138ceb","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.835551693,35.411621207],[132.835497114,35.411581232],[132.835430488,35.411654551],[132.835326056,35.411756579],[132.835418424,35.411815088],[132.83547506,35.411826347],[132.835524477,35.41181913],[132.835562719,35.411828176],[132.83561034,35.411774678],[132.835655783,35.411799886],[132.835711837,35.411740556],[132.835627628,35.411679455],[132.835551693,35.411621207]]]},"properties":{"polygon_uuid":"7c4d79e3-db5c-42fe-ab58-020035d67681","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.843822924,35.408757312],[132.843837951,35.408523682],[132.843780662,35.408500631],[132.843556531,35.40852192],[132.843421979,35.408526014],[132.843293476,35.408521725],[132.843143612,35.408513114],[132.84300165,35.408494979],[132.842760607,35.408444575],[132.842611443,35.40839472],[132.841533726,35.40794247],[132.84143538,35.408230223],[132.842964389,35.408594672],[132.843804224,35.408778628],[132.843822924,35.408757312]]]},"properties":{"polygon_uuid":"3672750e-d481-4f3d-8476-0266090ac168","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.840730348,35.405807694],[132.840901218,35.405495275],[132.840353458,35.40526575],[132.840290318,35.405274449],[132.839757688,35.406276212],[132.839774395,35.406311904],[132.840666873,35.406665285],[132.840711483,35.406650571],[132.840792748,35.406513341],[132.840958098,35.406232793],[132.84066184,35.406113976],[132.840711599,35.406030954],[132.840823105,35.405844908],[132.840730844,35.405807893],[132.840730348,35.405807694]]]},"properties":{"polygon_uuid":"377007d6-1049-4ca6-bc5e-02ba936419f7","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.834623103,35.405964061],[132.835099187,35.406081628],[132.835260545,35.406114124],[132.835276763,35.406102682],[132.835224754,35.405977761],[132.835206155,35.405947813],[132.835144557,35.405896402],[132.834967934,35.405743789],[132.834760919,35.40558802],[132.834623103,35.405964061]]]},"properties":{"polygon_uuid":"b6783c71-e174-462e-a0aa-02c5bf7b10db","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.838929421,35.406879788],[132.838927254,35.406879042],[132.838671862,35.406818694],[132.838665771,35.406817647],[132.838417323,35.407522921],[132.838697271,35.407588458],[132.838929421,35.406879788]]]},"properties":{"polygon_uuid":"6b31d27b-2ab6-440b-96f9-037c7774b01c","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.841926171,35.405846604],[132.842191741,35.405416069],[132.84210377,35.405381336],[132.842083602,35.40540816],[132.842063505,35.405443331],[132.84202723800001,35.405522334],[132.841989148,35.405573963],[132.841973101,35.405605773],[132.842000441,35.405620691],[132.841931885,35.405808071],[132.841921364,35.40583758],[132.841926171,35.405846604]]]},"properties":{"polygon_uuid":"d05591d0-bb47-4245-a119-041bec9dfb16","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.831438888,35.408420926],[132.832310388,35.40865227],[132.832447017,35.408282656],[132.831836817,35.408143341],[132.831826914,35.408171846],[132.831553184,35.408113252],[132.831438888,35.408420926]]]},"properties":{"polygon_uuid":"b1613513-6f65-421a-bec8-04a571eabf8d","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.843198685,35.410016912],[132.843423765,35.409620825],[132.843290789,35.40956965],[132.842930919,35.409453301],[132.842272364,35.409212957],[132.841846581,35.409995306],[132.841856957,35.410016951],[132.842955272,35.410415771],[132.842985846,35.410413931],[132.843198685,35.410016912]]]},"properties":{"polygon_uuid":"cdfaf0e5-c28c-4350-95ca-04ad99b7dd9e","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.841010882,35.404707181],[132.84107776,35.404552012],[132.84097418,35.404550975],[132.840920778,35.404660939],[132.841010882,35.404707181]]]},"properties":{"polygon_uuid":"ec8bda15-5f2c-4251-9413-057203ae001c","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.846140757,35.4071159],[132.846194642,35.407027186],[132.84597567,35.406940039],[132.845957358,35.406941052],[132.845695783,35.407380757],[132.845925152,35.407473846],[132.846140757,35.4071159]]]},"properties":{"polygon_uuid":"153e6378-b5f6-4fe7-83f9-05744cf470c8","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.837809178,35.404396271],[132.837997234,35.404451987],[132.837967286,35.404528948],[132.83795347,35.404584117],[132.838050667,35.404599461],[132.838035915,35.404690504],[132.838111372,35.404691754],[132.838157654,35.40467943],[132.838245417,35.404479022],[132.837843423,35.404330318],[132.837809178,35.404396271]]]},"properties":{"polygon_uuid":"94537ec9-0623-4c9b-986f-05c5f7b512ef","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.827072603,35.408584769],[132.827076038,35.408584194],[132.827609448,35.408714994],[132.827482018,35.408913793],[132.827426534,35.409033452],[132.827881159,35.409146358],[132.827911255,35.409127869],[132.828090671,35.408628332],[132.828078793,35.408597177],[132.827162384,35.408374521],[132.827128796,35.408377549],[132.827098591,35.408382668],[132.827082555,35.408394311],[132.827064755,35.408404281],[132.827050872,35.408556977],[132.827072603,35.408584769]]]},"properties":{"polygon_uuid":"c16505b0-ebf3-4c3c-b0e5-0611ef1a1f57","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.842449633,35.406004212],[132.842503407,35.405918877],[132.842333285,35.4058709],[132.842284682,35.405850739],[132.84219688,35.405812321],[132.842246686,35.405676296],[132.842234948,35.405675257],[132.842115521,35.405873788],[132.842449633,35.406004212]]]},"properties":{"polygon_uuid":"6574a057-68ae-4fdb-9ba0-06c35acc10c9","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.829252222,35.409233177],[132.829215904,35.409412657],[132.829335079,35.409424035],[132.829381735,35.409254199],[132.829252222,35.409233177]]]},"properties":{"polygon_uuid":"d9864745-98dd-435f-a466-0807e86f8d4c","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.835056188,35.408283042],[132.83521762,35.408324052],[132.835426494,35.40796961],[132.83514073,35.4078971],[132.835105318,35.407915552],[132.834996045,35.408212188],[132.835074131,35.408230834],[132.835056188,35.408283042]]]},"properties":{"polygon_uuid":"df5c9ed3-484b-44bb-a342-0871e2a0a49b","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.84294784,35.406126817],[132.842930841,35.406175867],[132.842984754,35.406196634],[132.843013162,35.406154336],[132.84294784,35.406126817]]]},"properties":{"polygon_uuid":"3b5ec641-8c27-4e47-8c73-0895a7db03e1","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.844733724,35.404936273],[132.844924983,35.405026319],[132.844971311,35.404963816],[132.8447853,35.404864641],[132.844733724,35.404936273]]]},"properties":{"polygon_uuid":"eb49cf18-c0f0-41b6-afcf-08c37f3534d0","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.839287571,35.412087368],[132.838845526,35.412896854],[132.83879183,35.412992619],[132.838801124,35.41301104],[132.838784185,35.413042624],[132.839427895,35.413291087],[132.839432608,35.413286487],[132.839442019,35.413190295],[132.83945246,35.413024081],[132.839455556,35.412989651],[132.839641711,35.412650086],[132.83964312,35.412645333],[132.839953301,35.412758553],[132.839970146,35.412750548],[132.839977514,35.412706996],[132.84013592,35.412416159],[132.84036851,35.411990566],[132.840354483,35.411959791],[132.839873778,35.411787107],[132.839741304,35.412029582],[132.839639115,35.412218933],[132.839287571,35.412087368]]]},"properties":{"polygon_uuid":"db7873a3-0d5b-4c60-beec-08ec7e005bd5","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.838131605,35.404758306],[132.838117438,35.404789888],[132.838277843,35.404833302],[132.838277606,35.404809012],[132.8382792,35.404804735],[132.838270554,35.404783582],[132.838249868,35.404763695],[132.838221604,35.404753185],[132.838190315,35.404750958],[132.838131605,35.404758306]]]},"properties":{"polygon_uuid":"b327eeb9-c45a-4e3c-ae55-09598523d093","daicho_shubetsu_cd":"FUD25"}},{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[132.83118073,35.409236579],[132.831413276,35.409316026],[132.831443427,35.409304304],[132.831482653,35.409230864],[132.831157208,35.409183547],[132.83118073,35.409236579]]]},"properties":{"polygon_uuid":"b1613513-6f65-421a-bec8-04a571eabf8d_COMPLETED","daicho_shubetsu_cd":"FUD25"}}]}\n`;
+
+        window.onload = function() {
+            document.getElementById('geojsonInput').value = initialGeojson;
+        };
+
+
+        /**
+         * GeoJSONジオメトリをWKT (Well-Known Text) 形式に変換する
+         * @param {object} geometry GeoJSONジオメトリオブジェクト
+         * @returns {string} WKT形式の文字列
+         */
+        function geometryToWkt(geometry) {
+            if (!geometry || !geometry.type || !geometry.coordinates) {
+                return '';
+            }
+
+            const type = geometry.type.toUpperCase();
+            const coords = geometry.coordinates;
+
+            function formatPoint(point) {
+                // GeoJSON: [longitude, latitude] -> WKT: longitude latitude
+                return `${point[0]} ${point[1]}`;
+            }
+
+            function formatLinearRing(ring) {
+                // GeoJSON ring: [[lon,lat], [lon,lat], ...] -> WKT ring: (lon lat, lon lat, ...)
+                return `(${ring.map(formatPoint).join(', ')})`;
+            }
+
+            switch (type) {
+                case 'POINT':
+                    return `POINT (${formatPoint(coords)})`;
+                case 'LINESTRING':
+                    return `LINESTRING (${coords.map(formatPoint).join(', ')})`;
+                case 'POLYGON':
+                    // GeoJSON coordinates: [[[lon,lat],...], [[lon,lat],...]] (exterior ring, then interior rings)
+                    // WKT: POLYGON((exterior_ring_points), (interior_ring_points), ...)
+                    return `POLYGON(${coords.map(formatLinearRing).join(', ')})`;
+                case 'MULTIPOINT':
+                    return `MULTIPOINT (${coords.map(formatPoint).join(', ')})`;
+                case 'MULTILINESTRING':
+                    // GeoJSON coordinates: [[[lon,lat],...], [[lon,lat],...]]
+                    // WKT: MULTILINESTRING((lon lat, ...), (lon lat, ...))
+                    return `MULTILINESTRING(${coords.map(formatLinearRing).join(', ')})`;
+                case 'MULTIPOLYGON':
+                    // GeoJSON coordinates: [[[[lon,lat],...]], [[[lon,lat],...]]]
+                    // WKT: MULTIPOLYGON(((poly1_ext_ring), (poly1_int_ring)), ((poly2_ext_ring)))
+                    return `MULTIPOLYGON(${coords.map(poly => `(${poly.map(formatLinearRing).join(', ')})`).join(', ')})`;
+                case 'GEOMETRYCOLLECTION':
+                    // GeometryCollectionは複雑なため、型のみを返すか、詳細な再帰処理が必要
+                    return 'GEOMETRYCOLLECTION';
+                default:
+                    return '';
+            }
+        }
+
+        /**
+         * CSVのセル値を適切にエスケープする
+         * カンマ、二重引用符、改行が含まれる場合は二重引用符で囲み、
+         * 内部の二重引用符は二重にエスケープする。
+         */
+        function escapeCsvValue(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            let stringValue = String(value);
+
+            // カンマ、二重引用符、改行のいずれかが含まれる場合、全体を二重引用符で囲む
+            // 内部の二重引用符は "" に変換する
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                stringValue = '"' + stringValue.replace(/"/g, '""') + '"';
+            }
+            return stringValue;
+        }
+
+        /**
+         * GeoJSONファイルを読み込み、CSVに変換して表示する
+         */
+        function convertToCsv() {
+            const geojsonInput = document.getElementById('geojsonInput');
+            const fileInput = document.getElementById('geojsonFile');
+            const csvOutput = document.getElementById('csvOutput');
+            const downloadButton = document.getElementById('downloadButton');
+            const messageElement = document.getElementById('message');
+
+            csvOutput.value = ''; // 以前の出力をクリア
+            downloadButton.style.display = 'none'; // ダウンロードボタンを非表示
+            messageElement.textContent = ''; // メッセージをクリア
+            currentCsvString = ''; // グローバル変数をクリア
+
+            let geojsonString = geojsonInput.value.trim();
+            let fileName = 'geojson_data.geojson'; // デフォルトのファイル名
+
+            if (fileInput.files.length > 0) {
+                // ファイルが選択されている場合、ファイルを優先
+                const file = fileInput.files[0];
+                fileName = file.name;
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    geojsonString = e.target.result;
+                    processGeojson(geojsonString, fileName);
+                };
+
+                reader.onerror = function(e) {
+                    messageElement.textContent = "ファイルの読み込み中にエラーが発生しました: " + reader.error.message;
+                };
+
+                reader.readAsText(file, 'UTF-8'); // GeoJSONはUTF-8で読み込む
+            } else if (geojsonString) {
+                // テキストエリアにGeoJSONデータが入力されている場合
+                processGeojson(geojsonString, fileName);
+            } else {
+                messageElement.textContent = "GeoJSONデータをご入力いただくか、GeoJSONファイルを選択してください。";
+                return;
+            }
+        }
+
+        /**
+         * 読み込んだGeoJSON文字列を処理してCSVを生成する
+         * @param {string} geojsonString GeoJSONの文字列
+         * @param {string} inputFileName 入力ファイル名（ダウンロード用）
+         */
+        function processGeojson(geojsonString, inputFileName) {
+            const csvOutput = document.getElementById('csvOutput');
+            const downloadButton = document.getElementById('downloadButton');
+            const messageElement = document.getElementById('message');
+
+            let data;
+            try {
+                // GeoJSONの内容をJSONとしてパース
+                data = JSON.parse(geojsonString);
+            } catch (jsonError) {
+                messageElement.textContent = "無効なGeoJSON形式です。入力内容を確認してください。\nエラー: " + jsonError.message;
+                return;
+            }
+
+            // GeoJSONのFeatureCollection形式であることを確認
+            if (!data || data.type !== "FeatureCollection" || !Array.isArray(data.features)) {
+                messageElement.textContent = "入力されたJSONは 'FeatureCollection' タイプである必要があり、'features' 配列を含んでいる必要があります。";
+                return;
+            }
+
+            const features = data.features;
+            if (features.length === 0) {
+                csvOutput.value = "変換するフィーチャーがありません。";
+                currentCsvString = '';
+                downloadButton.style.display = 'none';
+                return;
+            }
+
+            const allPropertyHeaders = new Set();
+            // ジオメトリ関連の固定ヘッダー
+            const geometryHeaders = ['geometry_type', 'geometry_wkt'];
+
+            // 1. 全てのフィーチャーのプロパティから、全てのユニークなヘッダー（列名）を収集
+            features.forEach(feature => {
+                if (feature.properties) {
+                    Object.keys(feature.properties).forEach(key => allPropertyHeaders.add(key));
+                }
+            });
+
+            // プロパティヘッダーをアルファベット順にソート
+            const sortedPropertyHeaders = Array.from(allPropertyHeaders).sort();
+
+            // 最終的なヘッダーはジオメトリ関連 + ソートされたプロパティヘッダー
+            const headerArray = [...geometryHeaders, ...sortedPropertyHeaders];
+
+            const rows = [];
+
+            // 2. CSVヘッダー行を作成
+            const csvHeader = headerArray.map(h => escapeCsvValue(h)).join(',');
+            rows.push(csvHeader);
+
+            // 3. 各フィーチャーからデータ行を作成
+            features.forEach(feature => {
+                const rowData = [];
+                const featureProperties = feature.properties || {};
+                const featureGeometry = feature.geometry;
+
+                headerArray.forEach(header => {
+                    let value = '';
+
+                    if (header === 'geometry_type') {
+                        value = featureGeometry ? featureGeometry.type : '';
+                    } else if (header === 'geometry_wkt') {
+                        value = geometryToWkt(featureGeometry);
+                    } else if (featureProperties.hasOwnProperty(header)) {
+                        value = featureProperties[header];
+                    }
+                    rowData.push(escapeCsvValue(value));
+                });
+                rows.push(rowData.join(','));
+            });
+
+            currentCsvString = rows.join('\n');
+            currentInputFileName = inputFileName; // ダウンロードのためにファイル名を保存
+            csvOutput.value = currentCsvString;
+            downloadButton.style.display = 'inline-block'; // ダウンロードボタンを表示
+            messageElement.textContent = "CSV変換が完了しました。";
+        }
+
+
+        /**
+         * 生成されたCSVデータをUTF-8でエンコードし、ファイルとしてダウンロードする
+         * 入力ファイル名に基づき、拡張子を '.csv' に変更した名前でダウンロードします。
+         */
+        function downloadCsv() {
+            const messageElement = document.getElementById('message');
+
+            if (!currentCsvString) {
+                messageElement.textContent = "ダウンロードするCSVデータがありません。先にGeoJSONをCSVに変換してください。";
+                return;
+            }
+
+            let downloadFileName = 'geojson_data.csv'; // デフォルトのファイル名
+            const originalFileName = currentInputFileName;
+
+            const lastDotIndex = originalFileName.lastIndexOf('.');
+            if (lastDotIndex > 0) {
+                // 既存の拡張子を '.csv' に置き換える
+                downloadFileName = originalFileName.substring(0, lastDotIndex) + '.csv';
+            } else {
+                // 拡張子がない場合、末尾に '.csv' を追加する
+                downloadFileName = originalFileName + '.csv';
+            }
+
+            // Blobを作成し、ダウンロードリンクを生成 (UTF-8エンコーディング)
+            const blob = new Blob([currentCsvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+
+            // ブラウザがdownload属性をサポートしているかチェック
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', downloadFileName); // ダウンロードファイル名
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click(); // クリックイベントをプログラムから発行
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url); // オブジェクトURLを解放 (メモリリーク防止)
+            } else {
+                messageElement.textContent = "お使いのブラウザはファイルダウンロードをサポートしていません。CSVデータをコピーして、別のエディタでUTF-8として保存してください。";
+            }
+        }
+    </script>
+</body>
+</html>

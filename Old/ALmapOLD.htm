@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>圃場ハイライト＋複数ピン一括集計対応版</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { display: flex; margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; }
+    #map { width: 85%; height: 100vh; }
+    #info { width: 15%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; background: #fff; }
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 14px; }
+    td, th { border: 1px solid #ccc; padding: 4px; word-wrap: break-word; }
+    th:first-child, td:first-child { width: 45%; }
+    th:last-child, td:last-child { width: 55%; }
+
+    .tiban-label {
+      background: rgba(255,255,255,0.85);
+      padding: 2px 6px;
+      border: 1px solid #333;
+      border-radius: 3px;
+      font-size: 12px;
+      pointer-events: none;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    /* --- 凡例エリア --- */
+    #legend label { margin: 2px 0; display: flex; align-items: center; cursor: pointer; font-size: 14px; }
+    #legend span.color-box {
+      display:inline-block; width:18px; height:18px; border-radius:3px; margin-right:6px; border:1px solid #333; flex-shrink: 0;
+    }
+    .legend-hatch {
+      background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 2px, transparent 2px, transparent 14px);
+      background-size: 14px 14px;
+    }
+
+    /* --- スイッチ --- */
+    .mode-switch-container {
+      background-color: #e3f2fd; border: 1px solid #90caf9; padding: 8px; border-radius: 5px; margin-bottom: 10px;
+    }
+    .switch-label { display: flex; align-items: center; cursor: pointer; font-weight: bold; color: #1565c0; font-size: 15px; }
+    .switch-input { margin-right: 8px; transform: scale(1.5); cursor: pointer; }
+
+    #outbtn {
+      margin: 8px 0; width: 100%; height: 36px; font-size: 16px;
+      background: #f8c363; border: 1px solid #d98400; border-radius: 5px; cursor: pointer;
+    }
+    #outbtn:hover { background: #ffca28; }
+
+    /* --- 詳細パネル --- */
+    .info-panel {
+      position: fixed; top: 0; left: -300px; width: 300px; height: 100%;
+      background: #f9f9f9; border-right: 1px solid #ccc; box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+      transition: left 0.3s ease; overflow-y: auto; z-index: 1000;
+    }
+    .info-panel.open { left: 0; }
+    .toggle-btn {
+      position: fixed; top: 10px; left: 10px; width: 40px; height: 40px;
+      background: #1565c0; color: #fff; text-align: center; line-height: 40px;
+      cursor: pointer; border-radius: 5px; font-size: 20px; z-index: 2000;
+    }
+    .leaflet-control-zoom { top: 60px !important; left: 10px !important; }
+    .leaflet-control-layers { margin-top: 10px; margin-right: 10px; }
+    #infoResizer {
+      position: absolute; top: 0; right: 0; width: 6px; height: 100%;
+      cursor: ew-resize; background: rgba(0,0,0,0.05);
+    }
+    .info-title {
+      display: block; margin: 0 0 8px 0; font-size: 18px; font-weight: bold;
+      color: #1565c0; border-bottom: 2px solid #ccc; padding-bottom: 4px;
+    }
+    #infoContent {
+      display: flex; flex-direction: column; gap: 16px; padding: 60px 12px 12px 12px;
+      overflow-y: auto; height: 100%; box-sizing: border-box;
+    }
+    #loadedFileNamesDisplay {
+      margin-top: 5px; font-size: 0.85em; color: #555; max-height: 100px;
+      overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #f9f9f9; border-radius: 3px;
+    }
+    #loadedFileNamesDisplay ul { margin: 0; padding-left: 20px; }
+    #clearSelectedFeaturesBtn {
+      margin-top: 5px; padding: 6px; background-color: #f44336; color: white;
+      border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; width: 100%;
+    }
+    #clearSelectedFeaturesBtn:hover { background-color: #d32f2f; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="info">
+    <h3 style="margin-top:0;">情報パネル</h3>
+    <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+      <h4 style="margin:5px 0;">住所検索</h4>
+      <input type="text" id="searchInput" placeholder="例: 出雲市...723" style="width: 65%; padding: 4px;">
+      <button id="searchBtn" style="width: 30%; cursor:pointer;">検索</button>
+    </div>
+    <div id="areaCalcSection">
+      <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
+      <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
+        ピンまたは圃場(集計ON時)をクリック
+      </div>
+      <button id="clearSelectedFeaturesBtn">集計クリア</button>
+    </div>
+    
+    <hr>
+    <input type="file" id="fileInput" accept=".geojson,.json" multiple style="width:100%;" />
+    <div id="loadedFileNamesDisplay"></div>
+    <hr>
+    
+    <div class="mode-switch-container">
+      <label class="switch-label">
+        <input type="checkbox" id="areaCalcSwitch" class="switch-input" checked>
+        面積集計モード
+      </label>
+      <div style="font-size:11px; font-weight:normal; color:#333; margin-left:28px; margin-top:2px;">
+        ONで圃場クリック時に<br><b>内部の全ピン</b>を表に追加
+      </div>
+    </div>
+
+    <h4 style="margin:5px 0;">作物（色塗り）</h4>
+    <div id="legend"></div>
+    
+    <button id="outbtn">作物をGeoJSONで保存</button>
+
+    <div id="infoPanel" class="info-panel">
+      <div id="infoToggle" class="toggle-btn">≡</div>
+      <div id="infoContent">
+        <h3 class="info-title">詳細情報</h3>
+        <div id="propertyDetails"></div>
+      </div>
+      <div id="infoResizer"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <script>
+let selectedFeatures = []; // 選択されたピン（面積集計用）
+let loadedFileNames = [];
+let map; 
+let polygonLayerGroup;
+let markerLayerGroup;
+let tibanLayerGroup;
+
+const propertyLabels = {
+  FarmCommitteeCd: "農業委員会コード",
+  FarmCommitteeName: "農業委員会名",
+  TodofukenCode: "都道府県コード",
+  ShikuchosonCode: "市町村コード",
+  OazaCode: "大字コード",
+  ClassificationOfLandCodeName: "地目",
+  ClassificationOfLand: "地目コード",
+  AreaOnRegistry: "登記簿面積（㎡）",
+  SectionOfNoushinhouCodeName: "農振法区分",
+  SectionOfNoushinhou: "農振法区分コード",
+  SectionOfToshikeikakuhouCodeName: "都市計画法区分",
+  SectionOfToshikeikakuhou: "都市計画法区分コード",
+  OwnerFarmIntentionCodeName: "所有者の農地に関する意向",
+  OwnerFarmIntention: "所有者の農地に関する意向コード",
+  FarmerIndicationNumberHash: "耕作者整理番号",
+  KindOfRightCodeName: "権利の種類",
+  KindOfRight: "権利の種類コード",
+  CommencementDate: "存続期間（始期）",
+  EndStagesDate: "存続期間（終期）",
+  RightSettingContentsCodeName: "農地中間管理権の状況",
+  RightSettingContents: "農地中間管理権コード",
+  UsageSituationInvestigationDate: "利用状況調査日",
+  UsageSituationInvestigationResultCodeName: "遊休農地かどうか",
+  UsageSituationInvestigationResult: "遊休農地コード",
+  UseIntentionInvestigationDate: "利用意向調査日",
+  OwnerStatementIntentSurveyResultsCodeName: "遊休農地の所有者等の意向",
+  OwnerStatementIntentSurveyResults: "遊休農地の所有者等の意向コード",
+  UseIntentionAscertainmentResultCodeName: "所有者等の確知の状況",
+  UseIntentionAscertainmentResult: "所有者等の確知コード",
+  PublicNoticeDate: "公告日",
+  RightOfMiddleManagement: "農地中間管理権裁定日",
+  RecommendationContenDate: "勧告日",
+  ActionOrderDate: "措置命令日",
+  MayorPublicAnnouncementDate: "市町村長公示日",
+  Address: "所在地・地番",
+  Tiban: "地番",
+  SectionOfPolygonCodeName: "ポリゴン区分",
+  SectionOfPolygon: "ポリゴン区分コード",
+  DaichoId: "台帳ID",
+  daicho_shubetsu_cd: "台帳種別コード"
+};
+
+
+// --- 色定義 ---
+const cropColors = {
+  "主食用きぬむすめ": "#90ee90",
+  "主食用つや姫": "#ffc0cb",
+  "主食用つきあかり": "#add8e6",
+  "主食用コシヒカリ": "#6a5acd",
+  "稲WCS用きぬむすめ": "#90ee90",
+  "稲WCS用つきはやか": "#9acd32", 
+  "稲WCS用たちすずか": "#d2b48c", 
+  "稲WCS用ヒメノモチ": "#ffb6c1",
+  "飼料用米": "#dda0dd", 
+  "大麦": "#ffcc99", 
+  "小麦": "#ff8c00", 
+  "ブロッコリー": "#228b22", 
+  "タマネギ": "#deb887",
+  "飼料用トウモロコシ": "#ffff00", 
+  "はとむぎ": "#654321", 
+  "さつまいも": "#800080", 
+  "大豆": "#f4a300", 
+  "その他": "#bdbdbd"
+};
+const cropOrder = Object.keys(cropColors); 
+
+function isHatchedCrop(cropName) {
+  const n = normalizeCrop(cropName);
+  return n && (n.includes("飼料用") || n.includes("WCS用"));
+}
+function normalizeCrop(name) {
+  if (!name && name !== "") return name;
+  return String(name).replace(/\u3000/g, " ").replace(/\s+/g, "").trim();
+}
+function getBaseCropNameForHatching(cropName) {
+  const crop = normalizeCrop(cropName);
+  if (crop && crop.startsWith("稲WCS用")) {
+    const variety = crop.replace("稲WCS用", "");
+    const candidate = `主食用${variety}`;
+    if (cropColors[candidate]) return candidate;
+  }
+  return crop;
+}
+function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
+  if (!mapInstance) return;
+  const renderer = mapInstance.getRenderer(mapInstance);
+  if (!renderer || !renderer._container) return;
+  const svg = renderer._container;
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  if (defs.querySelector(`#${patternId}`)) return;
+  const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+  pattern.setAttribute("id", patternId);
+  pattern.setAttribute("x", "0"); pattern.setAttribute("y", "0");
+  pattern.setAttribute("width", "10"); pattern.setAttribute("height", "10");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", "0"); rect.setAttribute("y", "0");
+  rect.setAttribute("width", "10"); rect.setAttribute("height", "10");
+  rect.setAttribute("fill", backgroundColor);
+  pattern.appendChild(rect);
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", "0"); line.setAttribute("y1", "0");
+  line.setAttribute("x2", "10"); line.setAttribute("y2", "10");
+  line.setAttribute("stroke", "#000"); line.setAttribute("stroke-width", "1");
+  line.setAttribute("stroke-opacity", "0.5");
+  pattern.appendChild(line);
+  defs.appendChild(pattern);
+}
+function getPolygonRenderStyle(cropName, isSelected = false) {
+  let currentFill, currentFillOpacity = "0.7", currentStroke = "#d00", currentStrokeWidth = "2";
+  if (isSelected) { currentStroke = "#0057ff"; currentStrokeWidth = "4"; }
+  const n = normalizeCrop(cropName);
+  if (!n) { currentFill = "transparent"; currentFillOpacity = "0.0"; }
+  else if (isHatchedCrop(n)) {
+    const base = getBaseCropNameForHatching(n);
+    const bg = cropColors[base] || cropColors["その他"] || "#e88";
+    if (map) {
+      // ★修正: 日本語を含んでもIDが重複しないように文字コードベースのユニークIDを生成
+      const safeId = base.split('').map(c => c.charCodeAt(0)).join('-'); 
+      const pid = `hatch-${safeId}-${map._leaflet_id}`;
+      
+      injectSvgHatchPattern(map, pid, bg);
+      currentFill = `url(#${pid})`;
+    } else { currentFill = bg; }
+  } else { currentFill = cropColors[n] || cropColors["その他"] || "#e88"; }
+  return { fill: currentFill, fillOpacity: currentFillOpacity, stroke: currentStroke, strokeWidth: currentStrokeWidth };
+}
+
+function createCropLegend(crops) {
+  const legendDiv = document.getElementById("legend");
+  let html = "";
+  crops.forEach((crop, i) => {
+    const base = getBaseCropNameForHatching(crop);
+    const hatchClass = isHatchedCrop(crop) ? "legend-hatch" : "";
+    const color = cropColors[base] || cropColors["その他"] || "#e88";
+    html += `<label>
+      <input type="radio" name="crop" value="${crop}" ${i===0 ? "checked":""}>
+      <span class="color-box ${hatchClass}" style="background-color:${color};"></span>${crop}
+    </label>`;
+  });
+  legendDiv.innerHTML = html;
+}
+function getSelectedCrop() {
+  const c = document.querySelector('input[name="crop"]:checked');
+  return c ? c.value.replace(/\u3000/g, " ").replace(/\s+/g, "").trim() : null;
+}
+function isAreaCalcMode() { return document.getElementById("areaCalcSwitch").checked; }
+
+// ピン選択の追加/削除/トグル
+function togglePinSelection(marker, forceState = null) { 
+  const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
+  let isAdded = false;
+
+  if (forceState === true) {
+    if (idx === -1) { selectedFeatures.push({ lyr: marker, feature: marker.feature }); isAdded = true; }
+  } else if (forceState === false) {
+    if (idx >= 0) selectedFeatures.splice(idx, 1);
+  } else { // toggle
+    if (idx >= 0) selectedFeatures.splice(idx, 1);
+    else { selectedFeatures.push({ lyr: marker, feature: marker.feature }); isAdded = true; }
+  }
+
+  updateAreaTable();
+  
+  if (isAdded || (forceState === null && idx === -1)) {
+    const props = marker.feature.properties;
+    let html = "<table>";
+    for (const key in props) {
+      const jp = propertyLabels[key] || key;
+      html += `<tr><td>${jp}</td><td>${props[key]}</td></tr>`;
+    }
+    html += "</table>";
+    document.getElementById("propertyDetails").innerHTML = html;
+  }
+}
+
+function updateAreaTable() {
+  const selectedPins = selectedFeatures.filter(item => item.feature.geometry.type === "Point");
+  document.getElementById("pinCount").innerText = selectedPins.length;
+  
+  if (selectedPins.length === 0) {
+    document.getElementById("details").innerHTML = "ピンまたは圃場(集計ON時)をクリック";
+    return;
+  }
+
+  selectedPins.sort((a, b) => {
+    const tA = String(a.feature.properties.Tiban || "");
+    const tB = String(b.feature.properties.Tiban || "");
+    return tA.localeCompare(tB, undefined, {numeric: true});
+  });
+
+  let totalArea = 0;
+  let html = "<table><thead><tr><th>地番</th><th>面積</th></tr></thead><tbody>";
+  selectedPins.forEach((item) => {
+    const props = item.feature?.properties || {};
+    let area = parseFloat(props.AreaOnRegistry) || 0;
+    totalArea += area;
+    html += `<tr><td>${props.Tiban || '-'}</td><td style="text-align:right;">${area.toLocaleString()}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  html += `<div style="color:#1565c0;font-weight:bold;margin-top:6px;text-align:right;">合計: ${totalArea.toLocaleString()} ㎡<br>(${ (totalArea/10000).toFixed(2) } ha)</div>`;
+  document.getElementById("details").innerHTML = html;
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
+  const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles © Esri" });
+  map = L.map("map", { center: [35.404, 132.825], zoom: 17, layers: [osm], renderer: L.svg() });
+  setTimeout(() => map.invalidateSize(), 100);
+
+  polygonLayerGroup = L.layerGroup().addTo(map);
+  markerLayerGroup  = L.layerGroup().addTo(map);
+  tibanLayerGroup   = L.layerGroup().addTo(map);
+  L.control.layers({ "地図": osm, "衛星画像": esriSat }, { "筆ポリゴン": polygonLayerGroup, "農地ピン": markerLayerGroup, "地番ラベル": tibanLayerGroup }).addTo(map);
+  map.doubleClickZoom.disable();
+
+  document.getElementById("infoToggle").addEventListener("click", () => document.getElementById("infoPanel").classList.toggle("open"));
+  const panel = document.getElementById("infoPanel"), resizer = document.getElementById("infoResizer");
+  let isResizing = false;
+  resizer.addEventListener("mousedown", () => { isResizing = true; document.body.style.cursor = "ew-resize"; });
+  document.addEventListener("mousemove", (e) => { if(isResizing) panel.style.width = Math.min(Math.max(e.clientX, 200), 600) + "px"; });
+  document.addEventListener("mouseup", () => { isResizing = false; document.body.style.cursor = "default"; });
+
+  updateLoadedFileNamesDisplay();
+  createCropLegend(cropOrder);
+
+  document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
+    selectedFeatures = []; updateAreaTable();
+    document.getElementById("propertyDetails").innerHTML = "";
+  });
+  map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
+
+  document.getElementById("fileInput").addEventListener("change", function(event) {
+    const files = event.target.files; if (!files.length) return;
+    let processed = 0;
+    let lastLoadedPinLatLng = null;
+
+    Array.from(files).forEach(file => {
+      if (loadedFileNames.includes(file.name)) {
+        alert(`「${file.name}」は読込済みです。`);
+        if (++processed === files.length) {
+          updateLoadedFileNamesDisplay();
+          if (lastLoadedPinLatLng) map.setView(lastLoadedPinLatLng, 17);
+        }
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const geojson = JSON.parse(e.target.result);
+          L.geoJSON(geojson, {
+            onEachFeature: function(feature, lyr) {
+              if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+                polygonLayerGroup.addLayer(lyr);
+                restorePolygonStyle(lyr);
+                let coords = feature.geometry.type==="Polygon" ? feature.geometry.coordinates[0][0] : feature.geometry.coordinates[0][0][0];
+                if (coords && feature.properties.Tiban) {
+                  tibanLayerGroup.addLayer(L.marker([coords[1],coords[0]], {
+                    icon: L.divIcon({className:"tiban-label", html:feature.properties.Tiban, iconSize:null}), interactive:false
+                  }));
+                }
+                
+                lyr.on("click", function(ev) {
+                  L.DomEvent.stopPropagation(ev);
+                  const currentCrop = getSelectedCrop();
+                  let isSelectedNow = false;
+                  
+                  if (normalizeCrop(feature.properties.SelectedCrop) === normalizeCrop(currentCrop)) {
+                    feature.properties.SelectedCrop = null; restorePolygonStyle(lyr); isSelectedNow = false;
+                  } else {
+                    feature.properties.SelectedCrop = currentCrop;
+                    const style = getPolygonRenderStyle(currentCrop, true);
+                    if (lyr._path) {
+                      lyr._path.setAttribute('fill', style.fill); lyr._path.setAttribute('fill-opacity', style.fillOpacity);
+                      lyr._path.setAttribute('stroke', style.stroke); lyr._path.setAttribute('stroke-width', style.strokeWidth);
+                    } else {
+                      const base = getBaseCropNameForHatching(currentCrop);
+                      lyr.setStyle({ fillColor: cropColors[base]||"#e88", color: style.stroke, weight: Number(style.strokeWidth) });
+                    }
+                    isSelectedNow = true;
+                  }
+
+                  if (isAreaCalcMode()) {
+                    const containedPins = [];
+                    markerLayerGroup.eachLayer(m => {
+                      if (turf.booleanPointInPolygon(m.feature, feature)) {
+                        containedPins.push(m);
+                      }
+                    });
+
+                    if (containedPins.length > 0) {
+                      containedPins.forEach(pin => {
+                          togglePinSelection(pin, isSelectedNow);
+                      });
+                    }
+                  }
+                });
+              } 
+              else if (feature.geometry.type === "Point") {
+                const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                lastLoadedPinLatLng = latlng;
+                const marker = L.marker(latlng);
+                marker.feature = feature;
+                markerLayerGroup.addLayer(marker);
+                marker.on("click", function(ev) {
+                  L.DomEvent.stopPropagation(ev);
+                  togglePinSelection(marker, null); 
+                  document.getElementById("infoPanel").classList.add("open");
+                });
+                if (feature.properties.Tiban) {
+                  tibanLayerGroup.addLayer(L.marker(latlng, {
+                    icon: L.divIcon({className:"tiban-label", html:feature.properties.Tiban, iconSize:null}), interactive:false
+                  }));
+                }
+              }
+            }
+          });
+          if (!loadedFileNames.includes(file.name)) loadedFileNames.push(file.name);
+        } catch(err) { alert(`エラー: ${file.name}`); }
+        
+        if (++processed === files.length) {
+           updateLoadedFileNamesDisplay();
+           if (lastLoadedPinLatLng) {
+             map.setView(lastLoadedPinLatLng, 17);
+           }
+        }
+      };
+      reader.readAsText(file);
+    });
+  });
+
+  document.getElementById('outbtn').addEventListener('click', async function() {
+    const geojson = polygonLayerGroup.toGeoJSON();
+    const dataStr = JSON.stringify(geojson, null, 2);
+    const fname = `MapData_${new Date().getTime()}.geojson`;
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] });
+        const writable = await handle.createWritable(); await writable.write(new Blob([dataStr], {type:'application/json'})); await writable.close();
+        alert('保存しました');
+      } catch(e) {}
+    } else {
+      const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
+      a.download = fname; a.click();
+    }
+  });
+});
+
+function updateLoadedFileNamesDisplay() {
+  const el = document.getElementById("loadedFileNamesDisplay");
+  if(!loadedFileNames.length) { el.innerHTML = "<em>ファイル未読み込み</em>"; return; }
+  el.innerHTML = `<b>読込済(${loadedFileNames.length}):</b><ul>` + loadedFileNames.map(n=>`<li>${n}</li>`).join('') + "</ul>";
+}
+function restorePolygonStyle(lyr) {
+  const crop = normalizeCrop(lyr.feature.properties?.SelectedCrop);
+  const style = getPolygonRenderStyle(crop, false);
+  if (lyr._path) {
+    lyr._path.setAttribute('fill', style.fill); lyr._path.setAttribute('fill-opacity', style.fillOpacity);
+    lyr._path.setAttribute('stroke', style.stroke); lyr._path.setAttribute('stroke-width', style.strokeWidth);
+  } else {
+    const base = getBaseCropNameForHatching(crop);
+    lyr.setStyle({
+      color: style.stroke, weight: Number(style.strokeWidth),
+      fillColor: (style.fill==="transparent"?"transparent":(cropColors[base]||"#e88")),
+      fillOpacity: parseFloat(style.fillOpacity)
+    });
+  }
+}
+
+// --- 住所検索機能の実装 ---
+  document.getElementById("searchBtn").addEventListener("click", function() {
+    const inputVal = document.getElementById("searchInput").value.trim();
+    if (!inputVal) {
+      alert("住所を入力してください");
+      return;
+    }
+
+    // 日本語の揺らぎ対策（全角数字を半角に、余計なスペース削除など）
+    const normalize = (str) => {
+      if (!str) return "";
+      return str.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)) // 全角数字→半角
+                .replace(/\s+/g, "") // 空白削除
+                .replace(/‐/g, "-").replace(/ー/g, "-"); // ハイフン正規化
+    };
+
+    const targetAddr = normalize(inputVal);
+    let foundLayer = null;
+
+    // 読み込まれているマーカーを全走査
+    markerLayerGroup.eachLayer(function(layer) {
+      if (foundLayer) return; // 既に見つかっていればスキップ
+
+      const props = layer.feature.properties;
+      // Addressプロパティがある前提（GeoJSONのキー名に合わせてください）
+      if (props && props.Address) {
+        const dataAddr = normalize(props.Address);
+        
+        // 入力された文字がデータに含まれているか判定 (部分一致)
+        if (dataAddr.includes(targetAddr)) {
+          foundLayer = layer;
+        }
+      }
+    });
+
+    if (foundLayer) {
+      // ピンの位置へズーム移動
+      map.setView(foundLayer.getLatLng(), 18);
+      // ピンをクリックした挙動を再現（詳細パネルを開く・選択状態にする）
+      foundLayer.fire('click'); 
+    } else {
+      alert("該当する住所のピンが見つかりませんでした。\n・ファイルが読み込まれているか確認してください\n・住所の一部だけで試してみてください");
+    }
+  });
+
+  </script>
+</body>
+</html>

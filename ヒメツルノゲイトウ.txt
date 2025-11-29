@@ -1,0 +1,4 @@
+﻿name,color,hatched
+ヒメツルノゲイトウ全面,#FF1919,false
+ヒメツルノゲイトウ一部,#E4F03D,false
+ヒメツルノゲイトウ観察中,#51E181,false

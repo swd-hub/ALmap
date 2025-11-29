@@ -1,0 +1,11 @@
+name,color,hatch,category
+主食用きぬむすめ,#90ee90,FALSE,水田
+主食用つや姫,#ffc0cb,FALSE,水田
+稲WCS用きぬむすめ,#90ee90,TRUE,水田
+稲WCS用たちすずか,#d2b48c,TRUE,水田
+飼料用米,#dda0dd,TRUE,水田
+大麦,#ffcc99,FALSE,畑
+小麦,#ff8c00,FALSE,畑
+ブロッコリー,#228b22,FALSE,畑
+リンゴ,#ff0000,FALSE,果樹園
+梨,#d1c217,FALSE,果樹園

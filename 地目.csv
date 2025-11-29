@@ -1,0 +1,6 @@
+﻿name,color,hatched
+水田,#FFFF19,false
+畑,#CCCC14,false
+果樹園,#99990F,true
+ハウス,#66660A,true
+その他,#333305,true
