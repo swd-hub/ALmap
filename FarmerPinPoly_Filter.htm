@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>🗺️ GeoJSON 耕作者整理番号検索＆抽出ツール</title>
+    <style>
+        /* --- 元のCSSスタイル --- */
+        body { font-family: sans-serif; padding: 20px; background-color: #f0f2f5; }
+        h1 { color: #17a2b8; border-bottom: 3px solid #17a2b8; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
+        h3 { color: #34495e; border-bottom: 2px solid #bdc3c7; padding-bottom: 5px; margin-top: 20px; }
+        
+        /* コンテナスタイル */
+        #file-input { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; background-color: #ecf0f1; border-radius: 5px; }
+        
+        /* 検索エリア（元のaddress-selectionのスタイルを流用） */
+        #search-area { border: 1px solid #3498db; padding: 15px; margin-bottom: 20px; background-color: #eaf6ff; border-radius: 5px; }
+        
+        /* テーブルスタイル */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
+        th { background-color: #17a2b8; color: white; position: sticky; top: 0; white-space: nowrap; }
+        
+        /* ボタン */
+        button { padding: 10px 15px; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; font-size: 14px; }
+        button:hover { filter: brightness(0.9); }
+        button:disabled { background-color: #ccc !important; cursor: not-allowed; }
+        
+        .process-button { background-color: #2ecc71; } /* 緑 */
+        .search-button { background-color: #17a2b8; font-weight: bold; } /* ティール */
+        
+        .download-button { margin-top: 10px; display: inline-block; width: auto; }
+        
+        /* ステータス表示 */
+        #statusMessage, #searchStatusMessage { margin-top: 10px; padding: 10px; border-radius: 5px; white-space: pre-wrap; display: none; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+        /* 検索入力フォーム用追加スタイル */
+        .search-box-container { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; min-width: 200px; }
+        label { font-weight: bold; color: #2c3e50; }
+
+        /* 結果エリアのスクロール */
+        .table-scroll { max-height: 500px; overflow-y: auto; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ GeoJSON 耕作者整理番号検索＆抽出ツール</h1>
+        <p>ピンとポリゴンのGeoJSONファイルをアップロードし、**「耕作者整理番号 (FarmerIndicationNumberHash)」**を入力することで、対象のピンと、そのピンが含まれるポリゴン（BBox判定）を抽出・ダウンロードします。</p>
+
+        <div id="file-input">
+            <h3>1. ファイル読み込み</h3>
+            <input type="file" id="geojsonFileInput" accept=".geojson,.json" multiple>
+            <button onclick="processFiles()" id="processBtn" class="process-button">ファイルを処理 (重複削除)</button>
+            <div id="statusMessage"></div>
+        </div>
+
+        <div id="search-area">
+            <h3>2. 番号検索</h3>
+            <p>※ファイルを処理後、ここに整理番号を入力して検索してください。</p>
+            
+            <div class="search-box-container">
+                <label for="hashInput">耕作者整理番号：FarmerIndicationNumberHash:</label>
+                <input type="text" id="hashInput" placeholder="例: abc12345..." disabled>
+                <button onclick="searchByHash()" id="searchBtn" class="search-button" disabled>検索 & 抽出</button>
+            </div>
+            <div id="searchStatusMessage"></div>
+        </div>
+
+        <div id="result-area">
+            <h3>3. 抽出されたデータ</h3>
+            
+            <div id="downloadButtonContainer" style="display:none; margin-bottom: 10px;">
+                <button class="download-button" onclick="downloadPinGeoJson()" disabled id="downloadPinButton" style="background-color: #f39c12;">
+                    📍 ピン ダウンロード
+                </button>
+                <button class="download-button" onclick="downloadPolyGeoJson()" disabled id="downloadPolyButton" style="background-color: #3498db;">
+                    📐 照合ポリゴン ダウンロード
+                </button>
+            </div>
+            
+            <div class="table-scroll">
+                <table id="dataTable">
+                    <thead><tr><th>データなし</th></tr></thead>
+                    <tbody><tr><td>ファイルを処理し、番号を検索してください。</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // -----------------------------------------------------------
+        // 1. グローバル変数
+        // -----------------------------------------------------------
+        let allUniquePinFeatures = [];   // 全ユニークピン
+        let allUniquePolyFeatures = [];  // 全ユニークポリゴン
+        
+        // 現在の検索結果保持用
+        let currentResult = { 
+            pin: [], 
+            poly: [], 
+            searchHash: "" 
+        };
+
+        // 検索対象のプロパティキー名
+        const TARGET_PROPERTY_KEY = "FarmerIndicationNumberHash";
+
+        // -----------------------------------------------------------
+        // 2. ユーティリティ関数
+        // -----------------------------------------------------------
+        function consistentStringify(obj) {
+            if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+            if (Array.isArray(obj)) return '[' + obj.map(item => consistentStringify(item)).join(',') + ']';
+            const sortedKeys = Object.keys(obj).sort();
+            const parts = sortedKeys.map(key => JSON.stringify(key) + ':' + consistentStringify(obj[key]));
+            return '{' + parts.join(',') + '}';
+        }
+
+        function getUniqueFeatures(features) {
+            const uniqueFeatures = [];
+            const seenSignatures = new Set();
+            features.forEach(feature => {
+                if (feature.geometry) {
+                    const geomStr = consistentStringify(feature.geometry);
+                    const propStr = consistentStringify(feature.properties);
+                    const signature = `${geomStr}|${propStr}`;
+                    if (!seenSignatures.has(signature)) {
+                        seenSignatures.add(signature);
+                        uniqueFeatures.push(feature);
+                    }
+                }
+            });
+            return uniqueFeatures;
+        }
+
+        async function loadAndSeparateFeatures(files) {
+            const featuresPin = [];
+            const featuresPoly = [];
+            const filePromises = files.map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        try {
+                            const json = JSON.parse(e.target.result);
+                            let features = [];
+                            if (json.type === "FeatureCollection" && Array.isArray(json.features)) {
+                                features = json.features;
+                            } else if (json.type === "Feature") {
+                                features.push(json);
+                            }
+                            
+                            features.forEach(f => {
+                                if (f.geometry && f.geometry.type === "Point") {
+                                    featuresPin.push(f);
+                                } else if (f.geometry) {
+                                    featuresPoly.push(f);
+                                }
+                            });
+                            resolve();
+                        } catch (err) {
+                            reject(`ファイル「${file.name}」は有効なGeoJSONではありません。`);
+                        }
+                    };
+                    reader.onerror = () => reject(`ファイル「${file.name}」の読み込みに失敗しました。`);
+                    reader.readAsText(file);
+                });
+            });
+            await Promise.all(filePromises);
+            return { pin: featuresPin, poly: featuresPoly };
+        }
+
+        function getFeatureBBox(feature) {
+            let minLng = Infinity, maxLng = -Infinity;
+            let minLat = Infinity, maxLat = -Infinity;
+            if (!feature.geometry || !feature.geometry.coordinates) return null;
+
+            const extractCoords = (c) => {
+                if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+                    minLng = Math.min(minLng, c[0]);
+                    maxLng = Math.max(maxLng, c[0]);
+                    minLat = Math.min(minLat, c[1]);
+                    maxLat = Math.max(maxLat, c[1]);
+                } else if (Array.isArray(c)) {
+                    c.forEach(extractCoords);
+                }
+            };
+            extractCoords(feature.geometry.coordinates);
+            if (minLng === Infinity) return null;
+            return [minLng, minLat, maxLng, maxLat];
+        }
+
+        // -----------------------------------------------------------
+        // 3. メイン処理 (読み込み)
+        // -----------------------------------------------------------
+        async function processFiles() {
+            const input = document.getElementById('geojsonFileInput');
+            const files = input.files;
+            const statusDiv = document.getElementById('statusMessage');
+            const processBtn = document.getElementById('processBtn');
+            const hashInput = document.getElementById('hashInput');
+            const searchBtn = document.getElementById('searchBtn');
+
+            if (files.length === 0) {
+                alert('ファイルを一つ以上選択してください。');
+                return;
+            }
+
+            // 初期化
+            statusDiv.style.display = 'block';
+            statusDiv.className = ""; 
+            statusDiv.textContent = 'ファイルを読み込み中...';
+            processBtn.disabled = true;
+            processBtn.textContent = "処理中...";
+
+            try {
+                const separatedFeatures = await loadAndSeparateFeatures(Array.from(files));
+                
+                allUniquePinFeatures = getUniqueFeatures(separatedFeatures.pin);
+                allUniquePolyFeatures = getUniqueFeatures(separatedFeatures.poly);
+
+                statusDiv.textContent = `✅ 処理完了: \n` + 
+                    `📍 ピン(Point): ユニーク ${allUniquePinFeatures.length}件\n` +
+                    `📐 ポリゴン他: ユニーク ${allUniquePolyFeatures.length}件\n` +
+                    `下のボックスで検索を行ってください。`;
+                statusDiv.className = "success";
+                
+                // 検索UI有効化
+                hashInput.disabled = false;
+                searchBtn.disabled = false;
+                hashInput.focus();
+
+            } catch (error) {
+                console.error(error);
+                statusDiv.textContent = '❌ エラーが発生しました: ' + error;
+                statusDiv.className = "error";
+            } finally {
+                processBtn.disabled = false;
+                processBtn.textContent = "ファイルを処理 (重複削除)";
+            }
+        }
+
+        // -----------------------------------------------------------
+        // 4. 検索＆抽出処理
+        // -----------------------------------------------------------
+        function searchByHash() {
+            const inputVal = document.getElementById('hashInput').value.trim();
+            const statusDiv = document.getElementById('searchStatusMessage');
+            
+            statusDiv.style.display = 'block';
+            
+            if (!inputVal) {
+                statusDiv.className = "error";
+                statusDiv.textContent = "⚠️ 整理番号を入力してください。";
+                return;
+            }
+
+            // 1. ピンのフィルタリング
+            const matchedPins = allUniquePinFeatures.filter(f => {
+                return f.properties && String(f.properties[TARGET_PROPERTY_KEY]) === inputVal;
+            });
+
+            let matchedPolygons = [];
+            
+            if (matchedPins.length === 0) {
+                statusDiv.className = "error";
+                statusDiv.textContent = `⚠️ 該当なし: 番号「${inputVal}」を持つピンは見つかりませんでした。`;
+            } else {
+                // 2. ポリゴンのBBox照合
+                const pinCoords = matchedPins.map(p => p.geometry.coordinates);
+
+                matchedPolygons = allUniquePolyFeatures.filter(poly => {
+                    const bbox = getFeatureBBox(poly);
+                    if (!bbox) return false;
+                    const [minX, minY, maxX, maxY] = bbox;
+                    
+                    return pinCoords.some(([px, py]) => {
+                        return px >= minX && px <= maxX && py >= minY && py <= maxY;
+                    });
+                });
+
+                statusDiv.className = "success";
+                statusDiv.textContent = `✅ 検索成功: ピン ${matchedPins.length}件 / 照合ポリゴン ${matchedPolygons.length}件`;
+            }
+
+            // 結果保存
+            currentResult = {
+                pin: matchedPins,
+                poly: matchedPolygons,
+                searchHash: inputVal
+            };
+
+            updateResultUI();
+        }
+
+        function updateResultUI() {
+            const table = document.getElementById('dataTable');
+            const downloadContainer = document.getElementById('downloadButtonContainer');
+            const btnPin = document.getElementById('downloadPinButton');
+            const btnPoly = document.getElementById('downloadPolyButton');
+
+            const totalData = [...currentResult.pin, ...currentResult.poly];
+
+            // ダウンロードボタン
+            if (totalData.length > 0) {
+                downloadContainer.style.display = 'block';
+                
+                btnPin.disabled = currentResult.pin.length === 0;
+                btnPin.textContent = `📍 ピン (${currentResult.pin.length}件) をダウンロード`;
+                
+                btnPoly.disabled = currentResult.poly.length === 0;
+                btnPoly.textContent = `📐 照合ポリゴン (${currentResult.poly.length}件) をダウンロード`;
+            } else {
+                downloadContainer.style.display = 'none';
+            }
+
+            // テーブル表示
+            table.innerHTML = '';
+            if (totalData.length === 0) {
+                table.innerHTML = '<thead><tr><th>データなし</th></tr></thead><tbody><tr><td>条件に一致するデータがありません。</td></tr></tbody>';
+                return;
+            }
+
+            // ヘッダー生成
+            const allProps = totalData.flatMap(f => Object.keys(f.properties || {}));
+            let uniqueHeaders = Array.from(new Set(allProps));
+            
+            // FarmerIndicationNumberHashを先頭にする
+            uniqueHeaders = uniqueHeaders.filter(h => h !== TARGET_PROPERTY_KEY);
+            let headers = ['GeoType', TARGET_PROPERTY_KEY, ...uniqueHeaders, 'Longitude', 'Latitude'];
+
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            headers.forEach(h => {
+                let th = document.createElement('th');
+                th.textContent = h;
+                headerRow.appendChild(th);
+            });
+
+            const tbody = table.createTBody();
+            totalData.forEach(f => {
+                const tr = tbody.insertRow();
+                const props = f.properties || {};
+                const geomType = f.geometry ? f.geometry.type : '-';
+                const coords = (geomType === 'Point' && f.geometry.coordinates) ? f.geometry.coordinates : null;
+
+                headers.forEach(h => {
+                    let td = tr.insertCell();
+                    if (h === 'GeoType') {
+                        td.textContent = geomType;
+                    } else if (h === 'Longitude') {
+                        td.textContent = coords ? coords[0].toFixed(6) : '---';
+                    } else if (h === 'Latitude') {
+                        td.textContent = coords ? coords[1].toFixed(6) : '---';
+                    } else {
+                        const val = (props[h] !== undefined && props[h] !== null) ? props[h] : '';
+                        td.textContent = val;
+                        
+                        // 検索ヒット箇所を太字+色付け
+                        if (h === TARGET_PROPERTY_KEY && String(val) === currentResult.searchHash) {
+                            td.style.fontWeight = 'bold';
+                            td.style.color = '#17a2b8';
+                        }
+                    }
+                });
+            });
+        }
+
+        // -----------------------------------------------------------
+        // 5. ダウンロード
+        // -----------------------------------------------------------
+        function getCurrentDateString() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}`;
+        }
+
+        function downloadGeoJson(features, typeSuffix) {
+            if (features.length === 0) return;
+
+            const geoJsonOutput = {
+                type: "FeatureCollection",
+                features: features
+            };
+
+            const hash = currentResult.searchHash || "unknown";
+            const dateStr = getCurrentDateString();
+            const filename = `${hash}_${typeSuffix}_${dateStr}.geojson`;
+            
+            const dataStr = JSON.stringify(geoJsonOutput, null, 2);
+            const blob = new Blob([dataStr], { type: "application/geo+json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadPinGeoJson() {
+            downloadGeoJson(currentResult.pin, "Pin");
+        }
+
+        function downloadPolyGeoJson() {
+            downloadGeoJson(currentResult.poly, "Polygon");
+        }
+    </script>
+</body>
+</html>
