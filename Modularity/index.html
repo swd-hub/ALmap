@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>圃場ハイライト＋複数ピン一括集計対応版</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { display: flex; margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; }
+    #map { width: 85%; height: 100vh; }
+    #info { width: 15%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; background: #fff; }
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 14px; }
+    td, th { border: 1px solid #ccc; padding: 4px; word-wrap: break-word; }
+    th:first-child, td:first-child { width: 45%; }
+    th:last-child, td:last-child { width: 55%; }
+
+    .tiban-label {
+      background: rgba(255,255,255,0.85);
+      padding: 2px 6px;
+      border: 1px solid #333;
+      border-radius: 3px;
+      font-size: 12px;
+      pointer-events: none;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    /* --- 凡例エリア --- */
+    #legend label { margin: 2px 0; display: flex; align-items: center; cursor: pointer; font-size: 14px; }
+    #legend span.color-box {
+      display:inline-block; width:18px; height:18px; border-radius:3px; margin-right:6px; border:1px solid #333; flex-shrink: 0;
+    }
+    .legend-hatch {
+      background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 2px, transparent 2px, transparent 14px);
+      background-size: 14px 14px;
+    }
+
+    /* --- スイッチ --- */
+    .mode-switch-container {
+      background-color: #e3f2fd; border: 1px solid #90caf9; padding: 8px; border-radius: 5px; margin-bottom: 10px;
+    }
+    .switch-label { display: flex; align-items: center; cursor: pointer; font-weight: bold; color: #1565c0; font-size: 15px; }
+    .switch-input { margin-right: 8px; transform: scale(1.5); cursor: pointer; }
+
+    #outbtn {
+      margin: 8px 0; width: 100%; height: 36px; font-size: 16px;
+      background: #f8c363; border: 1px solid #d98400; border-radius: 5px; cursor: pointer;
+    }
+    #outbtn:hover { background: #ffca28; }
+
+    /* --- 詳細パネル --- */
+    .info-panel {
+      position: fixed; top: 0; left: -300px; width: 300px; height: 100%;
+      background: #f9f9f9; border-right: 1px solid #ccc; box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+      transition: left 0.3s ease; overflow-y: auto; z-index: 1000;
+    }
+    .info-panel.open { left: 0; }
+    .toggle-btn {
+      position: fixed; top: 10px; left: 10px; width: 40px; height: 40px;
+      background: #1565c0; color: #fff; text-align: center; line-height: 40px;
+      cursor: pointer; border-radius: 5px; font-size: 20px; z-index: 2000;
+    }
+    .leaflet-control-zoom { top: 60px !important; left: 10px !important; }
+    .leaflet-control-layers { margin-top: 10px; margin-right: 10px; }
+    /* #infoResizer のスタイルはDOM操作で調整されるため残します */
+    #infoResizer {
+      position: absolute; top: 0; right: 0; width: 6px; height: 100%;
+      cursor: ew-resize; background: rgba(0,0,0,0.05);
+    }
+    .info-title {
+      display: block; margin: 0 0 8px 0; font-size: 18px; font-weight: bold;
+      color: #1565c0; border-bottom: 2px solid #ccc; padding-bottom: 4px;
+    }
+    #infoContent {
+      display: flex; flex-direction: column; gap: 16px; padding: 60px 12px 12px 12px;
+      overflow-y: auto; height: 100%; box-sizing: border-box;
+    }
+    #loadedFileNamesDisplay {
+      margin-top: 5px; font-size: 0.85em; color: #555; max-height: 100px;
+      overflow-y: auto; border: 1px solid #eee; padding: 5px; background-color: #f9f9f9; border-radius: 3px;
+    }
+    #loadedFileNamesDisplay ul { margin: 0; padding-left: 20px; }
+    #clearSelectedFeaturesBtn {
+      margin-top: 5px; padding: 6px; background-color: #f44336; color: white;
+      border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; width: 100%;
+    }
+    #clearSelectedFeaturesBtn:hover { background-color: #d32f2f; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="info">
+  <h3 style="margin-top:0;">情報パネル</h3>
+  <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+    <h4 style="margin:5px 0;">住所検索</h4>
+    <input type="text" id="searchInput" placeholder="例: 出雲市...723" style="width: 65%; padding: 4px;">
+    <button id="searchBtn" style="width: 30%; cursor:pointer;">検索</button>
+  </div>
+  <div id="areaCalcSection">
+    <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
+    <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
+      ピンまたは圃場(集計ON時)をクリック
+    </div>
+    <button id="clearSelectedFeaturesBtn">集計クリア</button>
+  </div>
+  
+  <hr>
+  <input type="file" id="fileInput" accept=".geojson,.json" multiple style="width:100%;" />
+  <div id="loadedFileNamesDisplay">ファイル未読み込み</div>
+  
+  <hr>
+  <h4 style="margin:5px 0;">スタイル定義（CSV）</h4>
+  <input type="file" id="styleFileInput" accept=".csv" style="width:100%;" />
+  <div id="styleFileNameDisplay" style="font-size:0.85em; color:#555; margin-top:5px;">スタイルファイル未読み込み</div>
+  <hr>
+  
+  <div class="mode-switch-container">
+    <label class="switch-label">
+      <input type="checkbox" id="areaCalcSwitch" class="switch-input" checked>
+      面積集計モード
+    </label>
+    <div style="font-size:11px; font-weight:normal; color:#333; margin-left:28px; margin-top:2px;">
+      ONで圃場クリック時に<br><b>内部の全ピン</b>を表に追加
+    </div>
+  </div>
+
+  <h4 style="margin:5px 0;">作物（色塗り）</h4>
+  <div id="legend"></div>
+  
+  <button id="outbtn">作物をGeoJSONで保存</button>
+
+  <div id="infoPanel" class="info-panel">
+    <div id="infoToggle" class="toggle-btn">≡</div>
+    <div id="infoContent">
+      <h3 class="info-title">詳細情報</h3>
+      <div id="propertyDetails"></div>
+    </div>
+    <div id="infoResizer"></div>
+  </div>
+</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  
+  <script src="dom-handler.js"></script>         <script src="map-initializer.js"></script>     <script src="style-manager.js"></script>       <script src="selection-manager.js"></script>   <script src="feature-processor.js"></script>   </body>
+</html>
