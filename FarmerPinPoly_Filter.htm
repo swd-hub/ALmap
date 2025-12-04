@@ -27,6 +27,7 @@
         
         .process-button { background-color: #2ecc71; } /* 緑 */
         .search-button { background-color: #17a2b8; font-weight: bold; } /* ティール */
+        .clear-button { background-color: #e74c3c; } /* 赤 */
         
         .download-button { margin-top: 10px; display: inline-block; width: auto; }
         
@@ -42,6 +43,23 @@
 
         /* 結果エリアのスクロール */
         .table-scroll { max-height: 500px; overflow-y: auto; margin-top: 15px; }
+
+        /* 読み込みファイル一覧 */
+        #loadedFilesList { 
+            margin-top: 10px; 
+            padding: 10px; 
+            background-color: #fff; 
+            border-left: 4px solid #17a2b8; 
+            border-radius: 3px;
+        }
+        .file-item {
+            padding: 5px 0;
+            font-size: 13px;
+            color: #2c3e50;
+        }
+        .file-item::before {
+            content: "📄 ";
+        }
     </style>
 </head>
 <body>
@@ -53,7 +71,9 @@
             <h3>1. ファイル読み込み</h3>
             <input type="file" id="geojsonFileInput" accept=".geojson,.json" multiple>
             <button onclick="processFiles()" id="processBtn" class="process-button">ファイルを処理 (重複削除)</button>
+            <button onclick="clearAllData()" id="clearBtn" class="clear-button" style="display: none;">データをクリア</button>
             <div id="statusMessage"></div>
+            <div id="loadedFilesList"></div>
         </div>
 
         <div id="search-area">
@@ -95,6 +115,7 @@
         // -----------------------------------------------------------
         let allUniquePinFeatures = [];   // 全ユニークピン
         let allUniquePolyFeatures = [];  // 全ユニークポリゴン
+        let loadedFileNames = [];        // 読み込んだファイル名リスト
         
         // 現在の検索結果保持用
         let currentResult = { 
@@ -157,7 +178,7 @@
                                     featuresPoly.push(f);
                                 }
                             });
-                            resolve();
+                            resolve(file.name);
                         } catch (err) {
                             reject(`ファイル「${file.name}」は有効なGeoJSONではありません。`);
                         }
@@ -166,8 +187,9 @@
                     reader.readAsText(file);
                 });
             });
-            await Promise.all(filePromises);
-            return { pin: featuresPin, poly: featuresPoly };
+            
+            const fileNames = await Promise.all(filePromises);
+            return { pin: featuresPin, poly: featuresPoly, fileNames: fileNames };
         }
 
         function getFeatureBBox(feature) {
@@ -190,6 +212,19 @@
             return [minLng, minLat, maxLng, maxLat];
         }
 
+        function updateLoadedFilesList() {
+            const listDiv = document.getElementById('loadedFilesList');
+            if (loadedFileNames.length === 0) {
+                listDiv.innerHTML = '';
+                return;
+            }
+            let html = '<strong>📋 読み込み済みファイル:</strong><br>';
+            loadedFileNames.forEach(name => {
+                html += `<div class="file-item">${name}</div>`;
+            });
+            listDiv.innerHTML = html;
+        }
+
         // -----------------------------------------------------------
         // 3. メイン処理 (読み込み)
         // -----------------------------------------------------------
@@ -198,6 +233,7 @@
             const files = input.files;
             const statusDiv = document.getElementById('statusMessage');
             const processBtn = document.getElementById('processBtn');
+            const clearBtn = document.getElementById('clearBtn');
             const hashInput = document.getElementById('hashInput');
             const searchBtn = document.getElementById('searchBtn');
 
@@ -216,18 +252,29 @@
             try {
                 const separatedFeatures = await loadAndSeparateFeatures(Array.from(files));
                 
-                allUniquePinFeatures = getUniqueFeatures(separatedFeatures.pin);
-                allUniquePolyFeatures = getUniqueFeatures(separatedFeatures.poly);
+                // 既存データに新規データを追加
+                const combinedPins = [...allUniquePinFeatures, ...separatedFeatures.pin];
+                const combinedPolys = [...allUniquePolyFeatures, ...separatedFeatures.poly];
+                
+                // 全体で重複削除
+                allUniquePinFeatures = getUniqueFeatures(combinedPins);
+                allUniquePolyFeatures = getUniqueFeatures(combinedPolys);
 
-                statusDiv.textContent = `✅ 処理完了: \n` + 
+                // ファイル名を累積
+                loadedFileNames = [...new Set([...loadedFileNames, ...separatedFeatures.fileNames])];
+
+                statusDiv.textContent = `✅ 処理完了:\n` + 
                     `📍 ピン(Point): ユニーク ${allUniquePinFeatures.length}件\n` +
                     `📐 ポリゴン他: ユニーク ${allUniquePolyFeatures.length}件\n` +
                     `下のボックスで検索を行ってください。`;
                 statusDiv.className = "success";
                 
+                updateLoadedFilesList();
+                
                 // 検索UI有効化
                 hashInput.disabled = false;
                 searchBtn.disabled = false;
+                clearBtn.style.display = 'inline-block';
                 hashInput.focus();
 
             } catch (error) {
@@ -238,6 +285,27 @@
                 processBtn.disabled = false;
                 processBtn.textContent = "ファイルを処理 (重複削除)";
             }
+        }
+
+        function clearAllData() {
+            if (!confirm('すべてのデータをクリアしますか？')) return;
+            
+            allUniquePinFeatures = [];
+            allUniquePolyFeatures = [];
+            loadedFileNames = [];
+            currentResult = { pin: [], poly: [], searchHash: "" };
+            
+            document.getElementById('geojsonFileInput').value = '';
+            document.getElementById('statusMessage').innerHTML = '';
+            document.getElementById('searchStatusMessage').innerHTML = '';
+            document.getElementById('loadedFilesList').innerHTML = '';
+            document.getElementById('dataTable').innerHTML = 
+                '<thead><tr><th>データなし</th></tr></thead><tbody><tr><td>ファイルを処理し、番号を検索してください。</td></tr></tbody>';
+            document.getElementById('downloadButtonContainer').style.display = 'none';
+            
+            document.getElementById('hashInput').disabled = true;
+            document.getElementById('searchBtn').disabled = true;
+            document.getElementById('clearBtn').style.display = 'none';
         }
 
         // -----------------------------------------------------------
