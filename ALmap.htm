@@ -92,7 +92,7 @@
 <div id="info">
   <h3 style="margin-top:0;">情報パネル</h3>
   <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-    <h4 style="margin:5px 0;">住所検索</h4>
+    <h4 style="margin:5px 0;">地番検索</h4>
     <input type="text" id="searchInput" placeholder="例: 出雲市...723" style="width: 65%; padding: 4px;">
     <button id="searchBtn" style="width: 30%; cursor:pointer;">検索</button>
   </div>
@@ -109,7 +109,7 @@
   <div id="loadedFileNamesDisplay">ファイル未読み込み</div>
   
   <hr>
-  <h4 style="margin:5px 0;">スタイル定義（CSV）</h4>
+  <h4 style="margin:5px 0;">色塗り定義（CSV）</h4>
   <input type="file" id="styleFileInput" accept=".csv" style="width:100%;" />
   <div id="styleFileNameDisplay" style="font-size:0.85em; color:#555; margin-top:5px;">スタイルファイル未読み込み</div>
   <hr>
@@ -616,11 +616,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
   map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
 
-  // 住所検索
+  // 地番検索
   document.getElementById("searchBtn").addEventListener("click", function() {
     const inputVal = document.getElementById("searchInput").value.trim();
     if (!inputVal) {
-      alert("住所を入力してください");
+      alert("地番を入力してください");
       return;
     }
     const normalize = (str) => {
@@ -645,7 +645,7 @@ document.addEventListener("DOMContentLoaded", function() {
       map.setView(foundLayer.getLatLng(), 18);
       foundLayer.fire('click');
     } else {
-      alert("該当する住所のピンが見つかりませんでした。\n・ファイルが読み込まれているか確認してください\n・住所の一部だけで試してみてください");
+      alert("該当する地番のピンが見つかりませんでした。\n・ファイルが読み込まれているか確認してください\n・地番の一部だけで試してみてください");
     }
   });
 
