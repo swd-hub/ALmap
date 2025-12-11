@@ -99,23 +99,28 @@
   <h3 style="margin-top:0;">情報パネル</h3>
 <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
   <h4 style="margin:5px 0;">地番検索</h4>
-  <input type="text" id="searchInput" placeholder="例: 出雲市...723" style="width: 65%; padding: 4px;">
-  <button id="searchBtn" style="width: 30%; cursor:pointer;">検索</button>
-  
+
+  <input type="text" id="searchInput" placeholder="例: 出雲市...723"
+         style="width: 50%; padding: 4px;">
+
+  <button id="searchBtn" style="width: 22%; cursor:pointer;">検索</button>
+  <button id="searchClearBtn" style="width: 22%; margin-left: 2%; cursor:pointer;">クリア</button>
+
   <!-- 🆕 検索結果リスト表示エリア -->
   <div id="searchResultsContainer" style="margin-top: 10px; display: none;">
     <div style="font-size: 12px; color: #999; margin-bottom: 5px;">
       <strong>検索結果：</strong><span id="resultCount">0</span>件
     </div>
     <div id="searchResults" style="
-      border: 1px solid #ddd; 
-      background: #fafafa; 
-      max-height: 200px; 
-      overflow-y: auto; 
+      border: 1px solid #ddd;
+      background: #fafafa;
+      max-height: 200px;
+      overflow-y: auto;
       border-radius: 3px;
     "></div>
   </div>
 </div>
+
   <div id="areaCalcSection">
     <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
     <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
@@ -148,9 +153,8 @@
   <div id="legend"></div>
   
   <button id="outbtn">作物をGeoJSONで保存</button>
-<button id="mapToSvgBtn">表示画面をSVGで保存</button>
 
-  <div id="infoPanel" class="info-panel">
+ <div id="infoPanel" class="info-panel">
     <div id="infoToggle" class="toggle-btn">≡</div>
     <div id="infoContent">
       <h3 class="info-title">詳細情報</h3>
@@ -800,48 +804,17 @@ document.getElementById("searchInput").addEventListener("keypress", function(e) 
 
 // [既存の displaySearchResults 関数は、ご提示のコードの最後に既に定義されています]
 // [そのため、ここでは定義を繰り返す必要はありませんが、機能が有効になります。]
+document.getElementById("searchClearBtn").addEventListener("click", () => {
+  // 入力欄クリア
+  document.getElementById("searchInput").value = "";
 
-
-// ========== 地図 → SVG 変換機能 ==========
-document.getElementById("mapToSvgBtn").addEventListener("click", async function() {
-  try {
-    const mapElement = document.getElementById("map");
-    
-    // html2canvas で現在表示の地図をキャプチャ
-    const canvas = await html2canvas(mapElement, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <image xlink:href="${imgData}" width="${width}" height="${height}" x="0" y="0"/>
-</svg>`;
-
-    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `MapCapture_${new Date().getTime()}.svg`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    alert("SVG で保存しました");
-// ... (中略) ...
-  } catch (error) {
-    alert(`エラー: ${error.message}`);
-  }
+  // 結果非表示
+  document.getElementById("searchResultsContainer").style.display = "none";
+  document.getElementById("searchResults").innerHTML = "";
+  document.getElementById("resultCount").textContent = "0";
 });
 
-}); // <-- これが不足していると、DOMContentLoaded のコールバック関数が閉じられません。
-
+}); 
 </script>
 
 </body>
