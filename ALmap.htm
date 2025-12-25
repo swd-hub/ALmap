@@ -84,6 +84,21 @@
       border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; width: 100%;
     }
     #clearSelectedFeaturesBtn:hover { background-color: #d32f2f; }
+    /* ボタンエリアのスタイル */
+#buttonArea {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 5px 0;
+}
+
+/* テーブルがボタンに被らないようにする */
+#propertyDetails table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5px;
+}
+    
   </style>
 </head>
 <body>
@@ -126,17 +141,19 @@
 
   <h4 style="margin:5px 0;">作物（色塗り）</h4>
   <div id="legend"></div>
-  
+
   <button id="outbtn">作物をGeoJSONで保存</button>
 
-  <div id="infoPanel" class="info-panel">
-    <div id="infoToggle" class="toggle-btn">≡</div>
-    <div id="infoContent">
-      <h3 class="info-title">詳細情報</h3>
-      <div id="propertyDetails"></div>
-    </div>
-    <div id="infoResizer"></div>
+<div id="infoPanel" class="info-panel">
+  <div id="infoToggle" class="toggle-btn">≡</div>
+  <div id="infoContent">
+    <h3 class="info-title">詳細情報</h3>
+    
+    <div id="buttonArea" style="display: flex; gap: 10px; margin-bottom: 15px; padding: 0 5px;"></div>
+    
+    <div id="propertyDetails"></div>
   </div>
+  <div id="infoResizer"></div>
 </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -149,9 +166,15 @@ let map;
 let polygonLayerGroup;
 let markerLayerGroup;
 let tibanLayerGroup;
+let loadedFiles = []; // 読み込んだファイル名を保持する配列
 
-// プロパティ日本語ラベル（そのまま）
+// プロパティ日本語ラベル（緯度経度を追加）
 const propertyLabels = {
+  // 座標情報
+  Longitude: "経度",
+  Latitude: "緯度",
+
+  // 基本情報
   FarmCommitteeCd: "農業委員会コード",
   FarmCommitteeName: "農業委員会名",
   TodofukenCode: "都道府県コード",
@@ -346,15 +369,33 @@ function togglePinSelection(marker, forceState = null) {
 
   updateAreaTable();
 
+  // --- ここから追加・修正 ---
+  // 表示用のデータを準備
+  const props = marker.feature.properties || {};
+  const coords = marker.feature.geometry ? marker.feature.geometry.coordinates : null;
+  
   if (isAdded || (forceState === null && idx === -1)) {
-    const props = marker.feature.properties || {};
     let html = "<table>";
+
+    // 1. 緯度経度を最初に追加
+    if (coords && coords.length >= 2) {
+      // 経度 (coordinates[0])
+      html += `<tr><td>${propertyLabels.Longitude || "経度"}</td><td>${coords[0]}</td></tr>`;
+      // 緯度 (coordinates[1])
+      html += `<tr><td>${propertyLabels.Latitude || "緯度"}</td><td>${coords[1]}</td></tr>`;
+    }
+
+    // 2. その他のプロパティをループで追加
     for (const key in props) {
       const jp = propertyLabels[key] || key;
-      html += `<tr><td>${jp}</td><td>${escapeHtml(props[key] ?? "")}</td></tr>`;
+      html += `<tr><td>${jp}</td><td>${escapeHtml(String(props[key] ?? ""))}</td></tr>`;
     }
+    
     html += "</table>";
     document.getElementById("propertyDetails").innerHTML = html;
+  } else {
+    // 選択解除された場合は詳細表示をクリアする（必要に応じて）
+    document.getElementById("propertyDetails").innerHTML = "";
   }
 }
 
@@ -495,11 +536,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 const marker = L.marker(latlng);
                 marker.feature = feature;
                 markerLayerGroup.addLayer(marker);
-                marker.on("click", function(ev) {
-                  L.DomEvent.stopPropagation(ev);
-                  togglePinSelection(marker, null);
-                  document.getElementById("infoPanel").classList.add("open");
-                });
+				marker.on("click", function(ev) {
+				  L.DomEvent.stopPropagation(ev);
+				  // 新しい関数を呼び出す（これでボタンが表示されるようになります）
+				  onFeatureClick(ev);
+				});
                 if (feature.properties && feature.properties.Tiban) {
                   tibanLayerGroup.addLayer(L.marker(latlng, {
                     icon: L.divIcon({className:"tiban-label", html:feature.properties.Tiban, iconSize:null}), interactive:false
@@ -674,12 +715,136 @@ function restorePolygonStyle(lyr) {
 }
 
 // 読み込み済みファイル表示更新
+// ピンや圃場がクリックされた時の処理
+function onFeatureClick(e) {
+    // 1. 座標を取得
+    var latlng = e.latlng || (e.target.getLatLng ? e.target.getLatLng() : e.target.getBounds().getCenter());
+    var lat = latlng.lat;
+    var lng = latlng.lng;
+
+    // 2. GoogleマップURLの作成（検索窓に座標を入れる公式URL）
+    var googleMapUrl = "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
+    
+    // 3. ボタンエリアのHTML作成
+    var btnHtml = '<button type="button" style="flex: 1; height: 44px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;">📄 詳細情報</button>';
+    btnHtml += '<a href="' + googleMapUrl + '" target="_blank" style="flex: 1; text-decoration: none;">';
+    btnHtml += '<button type="button" style="width: 100%; height: 44px; background-color: #4285F4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 Google Map</button>';
+    btnHtml += '</a>';
+    
+    // ボタンを流し込む
+    var btnArea = document.getElementById('buttonArea');
+    if (btnArea) btnArea.innerHTML = btnHtml;
+
+    // 4. 表（テーブル）の作成
+    var props = e.target.feature.properties || {};
+    var tableHtml = "<table>";
+    
+    // 緯度経度を最上段に追加
+    tableHtml += "<tr><th>経度</th><td>" + lng + "</td></tr>";
+    tableHtml += "<tr><th>緯度</th><td>" + lat + "</td></tr>";
+
+    for (var key in props) {
+        var label = propertyLabels[key] || key;
+        tableHtml += "<tr><th>" + label + "</th><td>" + escapeHtml(String(props[key] ?? "")) + "</td></tr>";
+    }
+    tableHtml += "</table>";
+    
+    // 表を流し込む
+    var detailsArea = document.getElementById('propertyDetails');
+    if (detailsArea) detailsArea.innerHTML = tableHtml;
+
+    // 5. 詳細パネルを開く
+    var panel = document.getElementById('infoPanel');
+    if (panel) {
+        panel.classList.add('open');
+    }
+} // ← ここで関数が正しく終わります
+
+// 読み込まれたファイル名の一覧を表示更新する関数
 function updateLoadedFileNamesDisplay() {
-  const el = document.getElementById("loadedFileNamesDisplay");
-  if(!loadedFileNames.length) { el.innerHTML = "<em>ファイル未読み込み</em>"; return; }
-  el.innerHTML = `<b>読込済(${loadedFileNames.length}):</b><ul>` + loadedFileNames.map(n=>`<li>${escapeHtml(n)}</li>`).join('') + "</ul>";
+    const displayArea = document.getElementById('loadedFileNamesDisplay');
+    if (!displayArea) return;
+
+    if (loadedFiles && loadedFiles.length > 0) {
+        let html = '<ul style="margin:0; padding-left:20px;">';
+        loadedFiles.forEach(fileName => {
+            html += `<li>${escapeHtml(fileName)}</li>`;
+        });
+        html += '</ul>';
+        displayArea.innerHTML = html;
+    } else {
+        displayArea.innerHTML = 'ファイル未読み込み';
+    }
+}
+
+// ピンや圃場がクリックされた時の処理（Google Mapボタンのみ版）
+function onFeatureClick(e) {
+    var lyr = e.target;
+    var feature = lyr.feature;
+    
+    // 座標を取得
+    var latlng = lyr.getLatLng ? lyr.getLatLng() : (e.latlng || e.target.getBounds().getCenter());
+    var lat = latlng.lat;
+    var lng = latlng.lng;
+
+    // GoogleマップURLの作成
+    var googleMapUrl = "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
+    
+    // --- ボタンの作成（Google Mapボタンのみ） ---
+    var btnHtml = '<a href="' + googleMapUrl + '" target="_blank" style="display: block; width: 100%; text-decoration: none;">';
+    btnHtml += '<button type="button" style="width: 100%; height: 44px; background-color: #4285F4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 Google Map で場所を確認</button>';
+    btnHtml += '</a>';
+    
+    // buttonAreaにボタンを表示
+    var btnArea = document.getElementById('buttonArea');
+    if (btnArea) {
+        btnArea.innerHTML = btnHtml;
+    }
+
+    // --- 表（テーブル）の作成 ---
+    var props = feature.properties || {};
+    var tableHtml = "<table>";
+    
+    // 緯度経度を最上段に追加
+    tableHtml += "<tr><th>経度</th><td>" + lng + "</td></tr>";
+    tableHtml += "<tr><th>緯度</th><td>" + lat + "</td></tr>";
+
+    for (var key in props) {
+        var label = propertyLabels[key] || key;
+        tableHtml += "<tr><th>" + label + "</th><td>" + escapeHtml(String(props[key] ?? "")) + "</td></tr>";
+    }
+    tableHtml += "</table>";
+    
+    // propertyDetailsに表を表示
+    var detailsArea = document.getElementById('propertyDetails');
+    if (detailsArea) {
+        detailsArea.innerHTML = tableHtml;
+    }
+
+    // 詳細パネルを開く
+    var panel = document.getElementById('infoPanel');
+    if (panel) {
+        panel.classList.add('open');
+    }
+
+    // 面積集計の連動
+    togglePinSelection(lyr, null);
+}
+
+// 読み込まれたファイル名の一覧を表示更新する関数
+function updateLoadedFileNamesDisplay() {
+    var displayArea = document.getElementById('loadedFileNamesDisplay');
+    if (!displayArea) return;
+
+    if (loadedFileNames && loadedFileNames.length > 0) {
+        var html = '<ul>' + loadedFileNames.map(function(f) { 
+            return '<li>' + escapeHtml(f) + '</li>'; 
+        }).join('') + '</ul>';
+        displayArea.innerHTML = html;
+    } else {
+        displayArea.innerHTML = 'ファイル未読み込み';
+    }
 }
 </script>
-
 </body>
 </html>
