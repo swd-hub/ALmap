@@ -142,6 +142,8 @@
   <h4 style="margin:5px 0;">作物（色塗り）</h4>
   <div id="legend"></div>
 
+<button id="fillAllBtn" style="margin: 8px 0; width: 100%; height: 36px; font-size: 16px; background: #4caf50; color: white; border: 1px solid #388e3c; border-radius: 5px; cursor: pointer;">全圃場を一括着色</button>
+
   <button id="outbtn">作物をGeoJSONで保存</button>
 
 <div id="infoPanel" class="info-panel">
@@ -158,6 +160,10 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="map-action.js"></script>
 
 <script>
 let selectedFeatures = []; // 選択されたピン（面積集計用）
@@ -562,6 +568,47 @@ document.addEventListener("DOMContentLoaded", function() {
       reader.readAsText(file);
     });
   });
+
+/**
+ * map-action.js
+ * 地図上の全ポリゴンを一括操作するスクリプト
+ */
+
+document.addEventListener("DOMContentLoaded", function() {
+    const fillBtn = document.getElementById("fillAllBtn");
+    
+    if (fillBtn) {
+        fillBtn.addEventListener("click", function() {
+            // 1. 現在選択されている作物を取得
+            // ※メインのHTML側の関数 getSelectedCrop() を呼び出します
+            const currentCrop = getSelectedCrop();
+            
+            if (!currentCrop) {
+                alert("右パネルの凡例から、着色したい作物（ラジオボタン）を選択してください。");
+                return;
+            }
+
+            const confirmMsg = `現在表示されているすべての圃場を「${currentCrop}」で塗りつぶしますか？\n（既に色が塗られている箇所も上書きされます）`;
+            if (!confirm(confirmMsg)) return;
+
+            // 2. 蓄積されているポリゴンレイヤーをループ処理
+            let count = 0;
+            polygonLayerGroup.eachLayer(function(lyr) {
+                if (lyr.feature && (lyr.feature.geometry.type === "Polygon" || lyr.feature.geometry.type === "MultiPolygon")) {
+                    
+                    // プロパティを更新
+                    lyr.feature.properties.SelectedCrop = currentCrop;
+                    
+                    // メイン側のスタイル復元関数を実行して色を反映
+                    restorePolygonStyle(lyr);
+                    count++;
+                }
+            });
+
+            alert(`${count} 件の圃場を着色しました。`);
+        });
+    }
+});
 
   // ---------- GeoJSON 保存 ----------
   document.getElementById('outbtn').addEventListener('click', async function() {
