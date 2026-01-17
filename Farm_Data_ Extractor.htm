@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV絞り込み & 空間抽出ツール (修正版)</title>
+    <title>CSV絞り込み & 空間抽出ツール (テキスト入力版)</title>
     <style>
         body {
             font-family: "Helvetica Neue", Arial, sans-serif;
@@ -133,15 +133,27 @@
         }
         textarea {
             width: 100%;
-            height: 200px;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-family: monospace;
             font-size: 12px;
-            background-color: #fafafa;
             box-sizing: border-box;
         }
+        /* 結果出力用のスタイル（リードオンリー風） */
+        .result-textarea {
+            height: 200px;
+            background-color: #fafafa;
+        }
+        /* 入力用のスタイル（書き込み可能風） */
+        .input-textarea {
+            height: 150px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
         .download-btn {
             background-color: #17a2b8;
             margin-top: 10px;
@@ -166,9 +178,9 @@
 <body>
 
     <div class="container">
-        <h1>CSV絞り込み & 空間抽出ツール (修正版)</h1>
+        <h1>CSV絞り込み & 空間抽出ツール (テキスト入力版)</h1>
         <p>ピンとポリゴンを含むGeoJSONファイルを入力し、<br>
-           <b>① CSVでピンを絞り込み</b> → <b>② そのピンが含まれるポリゴンのみを抽出</b> します。</p>
+           <b>① テキスト入力値でピンを絞り込み</b> → <b>② そのピンが含まれるポリゴンのみを抽出</b> します。</p>
 
         <div class="section">
             <h2>📂 1. GeoJSONファイル入力 (混合可)</h2>
@@ -188,12 +200,11 @@
                 </div>
             </div>
 
-            <h2>📝 2. フィルタリング用CSV入力</h2>
+            <h2>📝 2. フィルタリング用データ入力</h2>
             <div class="file-input-wrapper">
-                <label>住所リストCSV (.csv)</label>
-                <input type="file" id="csvFile" accept=".csv" onchange="updateCsvLabel()">
-                <p id="csvFileName" class="note" style="color: #007bff; font-weight: bold;"></p>
-                <p class="note">※ 1列目のデータを使用してピンのプロパティを検索し、一致するピンのみを残します。</p>
+                <label>住所リスト（テキスト貼り付け）</label>
+                <textarea id="csvTextInput" class="input-textarea" placeholder="ここに住所リストを貼り付けてください。&#13;&#10;（例）&#13;&#10;東京都千代田区1-1&#13;&#10;大阪府大阪市..."></textarea>
+                <p class="note">※ 改行区切りのデータとして処理します。CSV形式（カンマ区切り）の場合、各行の1列目を使用します。</p>
             </div>
         </div>
 
@@ -204,12 +215,12 @@
         <div class="output-container">
             <div class="output-box">
                 <h3>📍 結果 1: 絞り込まれたピン</h3>
-                <textarea id="outPins" readonly placeholder="CSVによりフィルタリングされたピンが表示されます"></textarea>
+                <textarea id="outPins" class="result-textarea" readonly placeholder="入力されたテキストによりフィルタリングされたピンが表示されます"></textarea>
                 <button onclick="download('pins')" class="download-btn" id="dlPins" style="display:none;">ピンをダウンロード</button>
             </div>
             <div class="output-box">
                 <h3>🗺️ 結果 2: 抽出されたポリゴン</h3>
-                <textarea id="outPolys" readonly placeholder="ピンの範囲に含まれるポリゴンが表示されます"></textarea>
+                <textarea id="outPolys" class="result-textarea" readonly placeholder="ピンの範囲に含まれるポリゴンが表示されます"></textarea>
                 <button onclick="download('polys')" class="download-btn" id="dlPolys" style="display:none;">ポリゴンをダウンロード</button>
             </div>
         </div>
@@ -268,22 +279,11 @@
             renderGeoFileList();
         }
 
-        // CSVファイル選択時の表示更新
-        function updateCsvLabel() {
-            const input = document.getElementById('csvFile');
-            const label = document.getElementById('csvFileName');
-            if(input.files.length > 0) {
-                label.textContent = `選択中: ${input.files[0].name}`;
-            } else {
-                label.textContent = "";
-            }
-        }
-
         // -------------------------------------------------
         // メイン処理関数
         // -------------------------------------------------
         async function executeProcess() {
-            const csvInput = document.getElementById('csvFile');
+            const csvTextInput = document.getElementById('csvTextInput');
             const runBtn = document.getElementById('runBtn');
             const statusDiv = document.getElementById('statusMsg');
 
@@ -299,8 +299,9 @@
                 showMsg("❌ GeoJSONファイルが選択されていません。", true);
                 return;
             }
-            if (csvInput.files.length === 0) {
-                showMsg("❌ フィルタリング用のCSVファイルを選択してください。", true);
+            // テキストエリアの入力チェック
+            if (!csvTextInput.value.trim()) {
+                showMsg("❌ フィルタリング用の住所データをテキストエリアに入力してください。", true);
                 return;
             }
 
@@ -308,11 +309,11 @@
             runBtn.textContent = "処理中...";
 
             try {
-                // 1. CSVの読み込み
-                const csvText = await readFile(csvInput.files[0]);
+                // 1. テキスト入力の読み込み
+                const csvText = csvTextInput.value;
                 const targetAddresses = parseCsv(csvText);
                 if (targetAddresses.length === 0) {
-                    throw new Error("CSVファイルから有効なデータ（住所など）を読み取れませんでした。");
+                    throw new Error("入力テキストから有効なデータ（住所など）を読み取れませんでした。");
                 }
 
                 // 2. GeoJSONの読み込みと分類
@@ -325,18 +326,18 @@
                     throw new Error("読み込んだファイルに「Polygon (ポリゴン)」データが含まれていません。");
                 }
 
-                // 3. CSVによるピンのフィルタリング
+                // 3. テキストデータによるピンのフィルタリング
                 const filteredPins = pins.filter(pin => {
                     const propStr = JSON.stringify(pin.properties || "");
                     return targetAddresses.some(addr => propStr.indexOf(addr) !== -1);
                 });
 
                 if (filteredPins.length === 0) {
-                    throw new Error("CSVの条件に一致するピンが1件もありませんでした。");
+                    throw new Error("入力条件に一致するピンが1件もありませんでした。");
                 }
 
                 // ----------------------------------------------------------
-                // 修正箇所: ここで「全体のBBox」ではなく「各ポリゴンごとの包含判定」を行う
+                // ポリゴンごとの包含判定
                 // ----------------------------------------------------------
                 
                 // 4. 残ったピンの座標リストを作成（高速化のため）
@@ -351,7 +352,6 @@
                     const [minX, minY, maxX, maxY] = polyBBox;
 
                     // 残ったピンのうち、ひとつでもこのポリゴンのBBox内にあるか？
-                    // (詳細な形状判定は重くなるため、コード2のデフォルト動作に合わせてBBox判定を採用)
                     return pinCoords.some(([px, py]) => {
                         return px >= minX && px <= maxX && py >= minY && py <= maxY;
                     });
@@ -376,7 +376,7 @@
                     `✅ 処理成功！\n` +
                     `--------------------------------------\n` +
                     `📥 入力ファイル数: ${inputGeoJsonFiles.length}件\n` +
-                    `📋 CSVフィルタ: ${targetAddresses.length}件の条件を使用\n` +
+                    `📋 フィルタ条件: ${targetAddresses.length}件のキーワードを使用\n` +
                     `⬇\n` +
                     `📍 絞り込みピン: ${filteredPins.length}件 (全${pins.length}件中)\n` +
                     `🗺️ 抽出ポリゴン: ${matchedPolygons.length}件 (全${polygons.length}件中)\n` +
@@ -406,10 +406,10 @@
             });
         }
 
-        // CSVパース
+        // CSV/テキストパース (改行区切りで配列化)
         function parseCsv(text) {
             return text.split(/\r?\n/)
-                .map(line => line.split(',')[0].trim())
+                .map(line => line.split(',')[0].trim()) // カンマがある場合は最初の列だけ取る
                 .filter(val => val !== "");
         }
 
