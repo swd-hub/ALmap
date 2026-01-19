@@ -29,32 +29,42 @@
     const files = document.getElementById('fileInput').files;
     if (!files.length) return alert('ファイルを選択してください');
 
-    for (const file of files) {
-      const reader = new FileReader();
+    // for...of ループではなく、インデックス(i)を使う通常のforループに変更
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // 🔑 setTimeout で処理を遅延させる (i * 300ミリ秒 ずつずらす)
+      setTimeout(() => {
+        const reader = new FileReader();
 
-      reader.onload = (e) => {
-        const name = file.name;
+        reader.onload = (e) => {
+          const name = file.name;
+          const baseName = name.replace(/\.[^.]+$/, "");
 
-        // 🔑 末尾の拡張子を1つだけ除去
-        const baseName = name.replace(/\.[^.]+$/, "");
+          let newName;
+          if (targetExt === "txt") {
+            newName = baseName + ".txt";
+          } else if (targetExt === "geojson") {
+            newName = baseName + ".geojson";
+          }
 
-        // 🔁 相互変換
-        let newName;
-        if (targetExt === "txt") {
-          newName = baseName + ".txt";
-        } else if (targetExt === "geojson") {
-          newName = baseName + ".geojson";
-        }
+          const blob = new Blob([e.target.result], { type: 'text/plain' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = newName;
+          
+          // ダウンロード発火
+          a.click();
+          
+          // オブジェクトURLの解放も少し待ってから行う（念のため）
+          setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+          }, 100);
+        };
 
-        const blob = new Blob([e.target.result], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = newName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      };
-
-      reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(file);
+        
+      }, i * 600); // ここで 0ms, 300ms, 600ms... と間隔を空ける
     }
   }
 </script>
