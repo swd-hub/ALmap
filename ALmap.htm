@@ -620,22 +620,59 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
 
-  // ---------- GeoJSON 保存 ----------
+// ---------- GeoJSON 保存（ファイル名クリーンアップ＋日付形式版） ----------
   document.getElementById('outbtn').addEventListener('click', async function() {
     const geojson = polygonLayerGroup.toGeoJSON();
-    // 現在のスタイル情報を properties に埋め込む（SelectedCropがあるものは保持）
-    // （既に SelectedCrop 等が properties にある想定）
+    
+    // 1. ファイル名の接頭辞（団体名など）を作成
+    let prefix = "";
+    if (loadedFileNames && loadedFileNames.length > 0) {
+      let rawName = loadedFileNames[0];
+      prefix = rawName
+        .replace(/\.geojson$/i, "")         // 拡張子を消す
+        .replace(/MapData.*/i, "")          // MapData以降を消す
+        .replace(/matched.*/i, "")          // matched以降を消す
+        .replace(/polygons.*/i, "")         // polygons以降を消す
+        .replace(/_+$/, "");                // 文末のアンダースコアを消す
+    }
+    
+    // 2. 謎の数字を「20260121_0858」のような読みやすい形式に変換
+    const now = new Date();
+    const dateStr = now.getFullYear() + 
+        ("0" + (now.getMonth() + 1)).slice(-2) + 
+        ("0" + now.getDate()).slice(-2) + "_" + 
+        ("0" + now.getHours()).slice(-2) + 
+        ("0" + now.getMinutes()).slice(-2);
+    
+    // 3. 最終的なファイル名を組み立て
+    const fname = prefix 
+      ? `${prefix}MapData_polygons_${dateStr}.geojson` 
+      : `MapData_polygons_${dateStr}.geojson`;
+
     const dataStr = JSON.stringify(geojson, null, 2);
-    const fname = `MapData_${new Date().getTime()}.geojson`;
+
+    // 4. 保存実行
     if (window.showSaveFilePicker) {
       try {
-        const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] });
-        const writable = await handle.createWritable(); await writable.write(new Blob([dataStr], {type:'application/json'})); await writable.close();
-        alert('保存しました');
-      } catch(e) {}
+        const handle = await window.showSaveFilePicker({ 
+          suggestedName: fname, 
+          types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] 
+        });
+        const writable = await handle.createWritable(); 
+        await writable.write(new Blob([dataStr], {type:'application/json'})); 
+        await writable.close();
+        alert('保存しました：' + fname);
+      } catch(e) {
+        if (e.name !== 'AbortError') {
+          console.error("Save error:", e);
+          alert('保存に失敗しました');
+        }
+      }
     } else {
-      const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
-      a.download = fname; a.click();
+      const a = document.createElement('a'); 
+      a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
+      a.download = fname; 
+      a.click();
     }
   });
 
