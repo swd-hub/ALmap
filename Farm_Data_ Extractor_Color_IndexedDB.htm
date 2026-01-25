@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farm Data Extractor Color(Point in Polygon)</title>
+    <style>
+        body { font-family: "Helvetica Neue", Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        h1 { font-size: 1.5rem; color: #2c3e50; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        .section { margin-bottom: 25px; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 10px; color: #555; }
+        
+        /* 1. GeoJSONアップロード部分 */
+        .file-drop-area { border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 6px; background: #fafafa; position: relative; }
+        .file-drop-area:hover { background: #f0f0f0; border-color: #999; }
+        input[type=file] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .file-msg { color: #888; pointer-events: none; }
+
+        /* リストのヘッダー（クリアボタン配置用） */
+        .list-header { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px; }
+        .hint-text { font-size: 0.8rem; color: #666; margin: 0; }
+        .btn-clear { background: #e74c3c; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        .btn-clear:hover { background: #c0392b; }
+
+        /* --- スクロール付きリストエリア（ここを修正しました） --- */
+        .file-list-scroll-box {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            max-height: 180px; /* 画像の高さに合わせた制限 */
+            overflow-y: auto;  /* 中身が増えたらスクロールを表示 */
+            margin-top: 5px;
+        }
+        ul.file-list { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; }
+        ul.file-list li { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            padding: 8px 12px; 
+            border-bottom: 1px solid #f0f0f0; 
+            color: #555;
+        }
+        ul.file-list li:last-child { border-bottom: none; }
+        .file-name-part { display: flex; align-items: center; gap: 8px; }
+        .file-size { color: #999; font-size: 0.8rem; }
+        .empty-msg { color: #ccc; font-style: italic; text-align: center; padding: 15px; }
+        /* ---------------------------------------------------- */
+
+        /* 2. テキスト入力 */
+        textarea { width: 100%; height: 120px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; resize: vertical; box-sizing: border-box;}
+
+        /* 実行エリア */
+        .action-area { text-align: center; margin: 30px 0; }
+        button.run-btn { background: #27ae60; color: white; border: none; padding: 12px 30px; font-size: 1rem; border-radius: 4px; cursor: pointer; transition: background 0.2s; font-weight: bold; width: 100%; }
+        button.run-btn:hover { background: #219150; }
+        button.run-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* 出力エリア */
+        .output-row { display: flex; gap: 20px; }
+        .output-col { flex: 1; }
+        .output-col h3 { font-size: 1rem; margin-bottom: 5px; }
+        .output-box { width: 100%; height: 150px; border: 1px solid #ddd; background: #f9f9f9; padding: 10px; overflow: auto; font-family: monospace; font-size: 0.8rem; box-sizing: border-box; color: #555; }
+        
+        .dl-btn { display: none; margin-top: 5px; width: 100%; padding: 8px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .dl-btn:hover { background: #2980b9; }
+
+        .message { padding: 10px; border-radius: 4px; margin-bottom: 20px; display: none; white-space: pre-wrap; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Farm Data Extractor Color IndexedDB</h1>
+    <div id="statusMsg" class="message"></div>
+
+    <div class="section">
+        <h2>1. GeoJSONファイルをアップロード (複数可)</h2>
+        <div class="file-drop-area">
+            <span class="file-msg">ここをクリック、またはファイルをドロップ</span>
+            <input type="file" id="geoFileInput" multiple onchange="addGeoFiles()">
+        </div>
+
+        <div class="list-header">
+            <p class="hint-text">※ ピン(Point)とポリゴン(Polygon)は自動判別されます。</p>
+            <button class="btn-clear" onclick="clearGeoFiles()">リストをクリア</button>
+        </div>
+
+        <div class="file-list-scroll-box">
+            <ul id="geoFileList" class="file-list">
+                <li class="empty-msg">まだファイルが選択されていません</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>2. 住所リストと評価値を貼り付け (ExcelからコピペOK)</h2>
+        <p style="font-size:0.8rem; color:#666; margin-top:0;">形式: 住所 [タブ] 評価値</p>
+        <textarea id="csvTextInput" placeholder="例：
+島根県出雲市斐川町三分市279	1以上1.5未満_少ない"></textarea>
+    </div>
+
+    <div class="action-area">
+        <button id="runBtn" class="run-btn" onclick="executeProcess()">処理を実行する</button>
+    </div>
+
+    <div class="section output-row">
+        <div class="output-col">
+            <h3>結果1: マッチしたピン (Filtered Points)</h3>
+            <textarea id="outPins" class="output-box" readonly></textarea>
+            <button id="dlPins" class="dl-btn" onclick="download('pins')">💾 ピンをダウンロード (.geojson)</button>
+        </div>
+        <div class="output-col">
+            <h3>結果2: 抽出されたポリゴン (Extracted Polygons)</h3>
+            <textarea id="outPolys" class="output-box" readonly></textarea>
+            <button id="dlPolys" class="dl-btn" onclick="download('polys')">💾 ポリゴンをダウンロード (.geojson)</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let inputGeoJsonFiles = [];
+    let resultPinsJson = "";
+    let resultPolysJson = "";
+
+    const DB_NAME = "AgriLand_Cache";
+    const STORE_NAME = "geojson_files";
+
+    // データベースを開く
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME, { keyPath: "name" });
+                }
+            };
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject("DBオープン失敗");
+        });
+    }
+
+    // 起動時にキャッシュを読み込む
+    async function initFromCache() {
+        try {
+            const db = await openDB();
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const cachedFiles = request.result;
+                if (cachedFiles && cachedFiles.length > 0) {
+                    inputGeoJsonFiles = cachedFiles.map(f => {
+                        return new File([f.content], f.name, { type: "application/geo+json" });
+                    });
+                    renderGeoFileList();
+                    showSuccess(`${cachedFiles.length} 件のファイルをキャッシュからロードしました。`);
+                }
+            };
+        } catch (e) {
+            console.error("Cache load error:", e);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', initFromCache);
+
+    // ファイル追加とIndexedDB保存
+    async function addGeoFiles() {
+        const input = document.getElementById('geoFileInput');
+        if (input.files.length === 0) return;
+
+        const newFiles = Array.from(input.files);
+        const db = await openDB();
+
+        for (const file of newFiles) {
+            try {
+                const content = await file.text();
+                
+                // ZIPファイルや不正な形式をチェック
+                if (content.startsWith("PK")) {
+                    console.warn(`Skipped: ${file.name} はZIP形式のためスキップされました。`);
+                    continue;
+                }
+
+                // ループ内で毎回トランザクションを作成することで、TransactionInactiveErrorを回避
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, "readwrite");
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.put({ 
+                        name: file.name, 
+                        content: content, 
+                        size: file.size,
+                        lastModified: file.lastModified 
+                    });
+                    req.onsuccess = resolve;
+                    req.onerror = reject;
+                });
+                
+                // メモリ上のリストに追加
+                inputGeoJsonFiles.push(file);
+
+            } catch (err) {
+                console.error(`保存失敗: ${file.name}`, err);
+            }
+        }
+        
+        renderGeoFileList();
+        input.value = ''; // 連続選択を可能にするためリセット
+    }
+
+    // リストの描画
+    function renderGeoFileList() {
+        const listEl = document.getElementById('geoFileList');
+        listEl.innerHTML = '';
+
+        if (inputGeoJsonFiles.length === 0) {
+            listEl.innerHTML = '<li class="empty-msg">まだファイルが選択されていません</li>';
+            return;
+        }
+
+        // ファイル名の重複を排除（同じファイルを上書きした場合など）
+        const uniqueMap = new Map();
+        inputGeoJsonFiles.forEach(f => uniqueMap.set(f.name, f));
+        inputGeoJsonFiles = Array.from(uniqueMap.values());
+
+        inputGeoJsonFiles.forEach(file => {
+            const li = document.createElement('li');
+            const sizeStr = file.size < 1024 * 1024
+                ? (file.size / 1024).toFixed(1) + " KB"
+                : (file.size / (1024 * 1024)).toFixed(1) + " MB";
+            
+            li.innerHTML = `
+                <div class="file-name-part">📄 ${ file.name }</div>
+                <div class="file-size">${sizeStr}</div>
+            `;
+            listEl.appendChild(li);
+        });
+    }
+
+    // キャッシュクリア
+    async function clearGeoFiles() {
+        if(!confirm("キャッシュを完全に消去しますか？")) return;
+        inputGeoJsonFiles = [];
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).clear();
+        renderGeoFileList();
+        showSuccess("クリア完了");
+    }
+
+    // --- 以下、計算ロジック（executeProcessなど）は既存のものをそのまま使用 ---
+    
+    async function executeProcess() {
+        const statusEl = document.getElementById('statusMsg');
+        const runBtn = document.getElementById('runBtn');
+        statusEl.style.display = 'none';
+        if (inputGeoJsonFiles.length === 0) { showError("ファイルを選択してください。"); return; }
+        const textInput = document.getElementById('csvTextInput').value.trim();
+        if (!textInput) { showError("リストを入力してください。"); return; }
+
+        try {
+            runBtn.disabled = true; runBtn.textContent = "処理中...";
+            const allFeatures = await readAllGeoJsonFiles(inputGeoJsonFiles);
+            const points = allFeatures.filter(f => f.geometry && f.geometry.type === 'Point');
+            const polygons = allFeatures.filter(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+            const filterMap = new Map();
+            textInput.split(/\r?\n/).forEach(line => {
+                const parts = line.split(/\t/);
+                if (parts.length >= 2) filterMap.set(parts[0].trim(), parts[1].trim());
+            });
+            const filteredPoints = [];
+            points.forEach(pt => {
+                const props = pt.properties || {};
+                for (const key in props) {
+                    const val = String(props[key]).trim();
+                    if (filterMap.has(val)) {
+                        pt.properties['SelectedCrop'] = filterMap.get(val);
+                        filteredPoints.push(JSON.parse(JSON.stringify(pt)));
+                        break;
+                    }
+                }
+            });
+            const resultPolys = [];
+            const addedPolyIds = new Set();
+            filteredPoints.forEach(pt => {
+                const coords = pt.geometry.coordinates;
+                const cropValue = pt.properties['SelectedCrop'];
+                polygons.forEach(poly => {
+                    const polyId = JSON.stringify(poly.geometry.coordinates);
+                    if (!addedPolyIds.has(polyId) && isPointInFeature(coords, poly)) {
+                        const newPoly = JSON.parse(JSON.stringify(poly));
+                        newPoly.properties['SelectedCrop'] = cropValue;
+                        resultPolys.push(newPoly);
+                        addedPolyIds.add(polyId);
+                    }
+                });
+            });
+            resultPinsJson = JSON.stringify({ type: "FeatureCollection", features: filteredPoints }, null, 2);
+            resultPolysJson = JSON.stringify({ type: "FeatureCollection", features: resultPolys }, null, 2);
+            document.getElementById('outPins').value = resultPinsJson;
+            document.getElementById('outPolys').value = resultPolysJson;
+            document.getElementById('dlPins').style.display = 'inline-block';
+            document.getElementById('dlPolys').style.display = 'inline-block';
+            showSuccess(`完了！\nピン: ${filteredPoints.length}件 / ポリゴン: ${resultPolys.length}件`);
+        } catch (e) { showError(e.message); }
+        finally { runBtn.disabled = false; runBtn.textContent = "処理を実行する"; }
+    }
+
+    function readAllGeoJsonFiles(files) {
+        return Promise.all(files.map(file => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const json = JSON.parse(e.target.result);
+                resolve(json.features || (json.type === 'Feature' ? [json] : []));
+            };
+            reader.readAsText(file);
+        }))).then(res => res.flat());
+    }
+
+    function isPointInFeature(pt, feature) {
+        const geom = feature.geometry;
+        if (geom.type === 'Polygon') return inside(pt, geom.coordinates[0]);
+        if (geom.type === 'MultiPolygon') return geom.coordinates.some(p => inside(pt, p[0]));
+        return false;
+    }
+
+    function inside(point, vs) {
+        let x = point[0], y = point[1], inside = false;
+        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+            let xi = vs[i][0], yi = vs[i][1], xj = vs[j][0], yj = vs[j][1];
+            if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+
+    function showSuccess(msg) {
+        const el = document.getElementById('statusMsg');
+        el.className = 'message success'; el.style.display = 'block'; el.textContent = msg;
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('statusMsg');
+        el.className = 'message error'; el.style.display = 'block'; el.textContent = "エラー: " + msg;
+    }
+
+    function download(type) {
+        const content = (type === 'pins') ? resultPinsJson : resultPolysJson;
+        const blob = new Blob([content], { type: "application/geo+json" });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (type === 'pins' ? "filtered_pins.geojson" : "extracted_polygons.geojson");
+        a.click();
+    }
+</script>
+</body>
+</html>
