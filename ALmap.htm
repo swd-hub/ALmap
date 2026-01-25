@@ -107,21 +107,44 @@
 <div id="info">
   <h3 style="margin-top:0;">情報パネル</h3>
   <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-    <h4 style="margin:5px 0;">住所検索</h4>
-    <input type="text" id="searchInput" placeholder="例: 出雲市...723" style="width: 65%; padding: 4px;">
-    <button id="searchBtn" style="width: 30%; cursor:pointer;">検索</button>
+  <h4 style="margin:5px 0;">地番検索</h4>
+  <input type="text" id="searchInput" placeholder="例: 出雲市...723"
+         style="width: 50%; padding: 4px;">
+
+  <button id="searchBtn" style="width: 22%; cursor:pointer;">検索</button>
+  <button id="searchClearBtn" style="width: 22%; margin-left: 2%; cursor:pointer;">クリア</button>
+
+  <!-- 🆕 検索結果リスト表示エリア -->
+  <div id="searchResultsContainer" style="margin-top: 10px; display: none;">
+    <div style="font-size: 12px; color: #999; margin-bottom: 5px;">
+      <strong>検索結果：</strong><span id="resultCount">0</span>件
+    </div>
+    <div id="searchResults" style="
+      border: 1px solid #ddd;
+      background: #fafafa;
+      max-height: 200px;
+      overflow-y: auto;
+      border-radius: 3px;
+    "></div>
   </div>
+</div>
+  
+  
   <div id="areaCalcSection">
     <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
     <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
       ピンまたは圃場(集計ON時)をクリック
     </div>
+    
+    
     <button id="clearSelectedFeaturesBtn">集計クリア</button>
   </div>
   
   <hr>
   <input type="file" id="fileInput" accept=".geojson,.json" multiple style="width:100%;" />
   <div id="loadedFileNamesDisplay">ファイル未読み込み</div>
+  <button id="clearAllFilesBtn" style="width:100%; background:#ff5252; color:white; border:none; padding:8px; margin-top:5px; border-radius:5px; cursor:pointer; font-weight:bold;">読み込んだ全ファイルを解除</button>
+
   
   <hr>
   <h4 style="margin:5px 0;">スタイル定義（CSV）</h4>
@@ -156,6 +179,8 @@
   <div id="infoResizer"></div>
 </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
@@ -446,14 +471,45 @@ document.addEventListener("DOMContentLoaded", function() {
   document.addEventListener("mousemove", (e) => { if(isResizing) panel.style.width = Math.min(Math.max(e.clientX, 200), 600) + "px"; });
   document.addEventListener("mouseup", () => { isResizing = false; document.body.style.cursor = "default"; });
 
+  // --- 追加：読み込んだ全ファイルを解除する処理 ---
+  const clearBtn = document.getElementById("clearAllFilesBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function() {
+      if (!confirm("読み込んだすべてのファイルを地図から削除し、リセットしますか？")) return;
+
+      // 1. 地図上のレイヤーをすべて消去
+      polygonLayerGroup.clearLayers();
+      markerLayerGroup.clearLayers();
+      tibanLayerGroup.clearLayers();
+
+      // 2. 内部変数をリセット
+      loadedFileNames = [];
+      if (typeof loadedFiles !== 'undefined') loadedFiles = [];
+      selectedFeatures = [];
+
+      // 3. UI表示をリセット
+      updateLoadedFileNamesDisplay();
+      updateAreaTable();
+      document.getElementById("propertyDetails").innerHTML = "";
+      if (document.getElementById("buttonArea")) document.getElementById("buttonArea").innerHTML = "";
+      document.getElementById("fileInput").value = ""; // 同じファイルを再読込可能にする
+
+    });
+  }
+
+  // 集計クリアボタン
+  document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
+    selectedFeatures = []; 
+    updateAreaTable();
+    document.getElementById("propertyDetails").innerHTML = "";
+  });
+
   updateLoadedFileNamesDisplay();
   createCropLegend(cropOrder);
 
-  document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
-    selectedFeatures = []; updateAreaTable();
-    document.getElementById("propertyDetails").innerHTML = "";
-  });
   map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
+
+  // --- 以下、ファイル読み込みや検索ボタンのロジックが続きます ---
 
   // ---------- ファイル読み込み（GeoJSON 複数） ----------
   document.getElementById("fileInput").addEventListener("change", function(event) {
@@ -563,22 +619,60 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 
-  // ---------- GeoJSON 保存 ----------
+
+// ---------- GeoJSON 保存（ファイル名クリーンアップ＋日付形式版） ----------
   document.getElementById('outbtn').addEventListener('click', async function() {
     const geojson = polygonLayerGroup.toGeoJSON();
-    // 現在のスタイル情報を properties に埋め込む（SelectedCropがあるものは保持）
-    // （既に SelectedCrop 等が properties にある想定）
+    
+    // 1. ファイル名の接頭辞（団体名など）を作成
+    let prefix = "";
+    if (loadedFileNames && loadedFileNames.length > 0) {
+      let rawName = loadedFileNames[0];
+      prefix = rawName
+        .replace(/\.geojson$/i, "")         // 拡張子を消す
+        .replace(/MapData.*/i, "")          // MapData以降を消す
+        .replace(/matched.*/i, "")          // matched以降を消す
+        .replace(/polygons.*/i, "")         // polygons以降を消す
+        .replace(/_+$/, "");                // 文末のアンダースコアを消す
+    }
+    
+    // 2. 謎の数字を「20260121_0858」のような読みやすい形式に変換
+    const now = new Date();
+    const dateStr = now.getFullYear() + 
+        ("0" + (now.getMonth() + 1)).slice(-2) + 
+        ("0" + now.getDate()).slice(-2) + "_" + 
+        ("0" + now.getHours()).slice(-2) + 
+        ("0" + now.getMinutes()).slice(-2);
+    
+    // 3. 最終的なファイル名を組み立て
+    const fname = prefix 
+      ? `${prefix}MapData_polygons_${dateStr}.geojson` 
+      : `MapData_polygons_${dateStr}.geojson`;
+
     const dataStr = JSON.stringify(geojson, null, 2);
-    const fname = `MapData_${new Date().getTime()}.geojson`;
+
+    // 4. 保存実行
     if (window.showSaveFilePicker) {
       try {
-        const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] });
-        const writable = await handle.createWritable(); await writable.write(new Blob([dataStr], {type:'application/json'})); await writable.close();
-        alert('保存しました');
-      } catch(e) {}
+        const handle = await window.showSaveFilePicker({ 
+          suggestedName: fname, 
+          types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] 
+        });
+        const writable = await handle.createWritable(); 
+        await writable.write(new Blob([dataStr], {type:'application/json'})); 
+        await writable.close();
+        alert('保存しました：' + fname);
+      } catch(e) {
+        if (e.name !== 'AbortError') {
+          console.error("Save error:", e);
+          alert('保存に失敗しました');
+        }
+      }
     } else {
-      const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
-      a.download = fname; a.click();
+      const a = document.createElement('a'); 
+      a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
+      a.download = fname; 
+      a.click();
     }
   });
 
@@ -657,47 +751,91 @@ document.addEventListener("DOMContentLoaded", function() {
 
   map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
 
-  // 住所検索
-  document.getElementById("searchBtn").addEventListener("click", function() {
+
+// --- 1. 住所・地番検索の本体 ---
+  function searchTiban() {
     const inputVal = document.getElementById("searchInput").value.trim();
     if (!inputVal) {
-      alert("住所を入力してください");
+      alert("検索ワードを入力してください");
       return;
     }
+
+    // 全角・半角や空白を整える
     const normalize = (str) => {
       if (!str) return "";
       return str.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
                 .replace(/\s+/g, "")
                 .replace(/‐/g, "-").replace(/ー/g, "-");
     };
-    const targetAddr = normalize(inputVal);
-    let foundLayer = null;
+
+    const target = normalize(inputVal);
+    const results = [];
+
+    // markerLayerGroup内のピンを検索
     markerLayerGroup.eachLayer(function(layer) {
-      if (foundLayer) return;
       const props = layer.feature && layer.feature.properties;
-      if (props && props.Address) {
-        const dataAddr = normalize(props.Address);
-        if (dataAddr.includes(targetAddr)) {
-          foundLayer = layer;
+      if (props) {
+        const addr = normalize(props.Address || "");
+        const tiban = normalize(props.Tiban || "");
+        if (addr.includes(target) || tiban.includes(target)) {
+          results.push(layer);
         }
       }
     });
-    if (foundLayer) {
-      map.setView(foundLayer.getLatLng(), 18);
-      foundLayer.fire('click');
+
+    const resultContainer = document.getElementById("searchResultsContainer");
+    const resultList = document.getElementById("searchResults");
+    const countSpan = document.getElementById("resultCount");
+
+    if (results.length > 0) {
+      resultContainer.style.display = "block";
+      countSpan.textContent = results.length;
+      resultList.innerHTML = "";
+      
+      results.forEach((layer, index) => {
+        const p = layer.feature.properties;
+        const item = document.createElement("div");
+        item.style = "padding:8px; border-bottom:1px solid #eee; cursor:pointer; font-size:13px;";
+        item.innerHTML = `<strong>${p.Tiban || '地番不明'}</strong><br><span style="color:#666; font-size:11px;">${p.Address || ''}</span>`;
+        item.onclick = () => {
+          map.setView(layer.getLatLng(), 19);
+          layer.fire('click');
+        };
+        resultList.appendChild(item);
+      });
+
+      // 1件なら即座に移動
+      if (results.length === 1) {
+        map.setView(results[0].getLatLng(), 19);
+        results[0].fire('click');
+      }
     } else {
-      alert("該当する住所のピンが見つかりませんでした。\n・ファイルが読み込まれているか確認してください\n・住所の一部だけで試してみてください");
+      alert("該当する地番や住所が見つかりませんでした。");
+      resultContainer.style.display = "none";
     }
+  }
+
+  // --- 2. イベントリスナーの登録 ---
+  document.getElementById("searchBtn").addEventListener("click", searchTiban);
+  document.getElementById("searchInput").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") searchTiban();
   });
 
-});
+  document.getElementById("searchClearBtn").addEventListener("click", () => {
+    document.getElementById("searchInput").value = "";
+    document.getElementById("searchResultsContainer").style.display = "none";
+    document.getElementById("searchResults").innerHTML = "";
+    document.getElementById("resultCount").textContent = "0";
+  });
 
-// ポリゴンスタイル復元（SelectedCrop を尊重）
+}); // ここで冒頭の DOMContentLoaded を確実に閉じます
+
+// --- 3. 独立した関数群（DOMContentLoadedの外側に配置） ---
+
 function restorePolygonStyle(lyr) {
   const crop = normalizeCrop(lyr.feature.properties?.SelectedCrop);
   const style = getPolygonRenderStyle(crop, false);
   if (lyr._path) {
-    // SVG パスの場合
     lyr._path.setAttribute('fill', style.fill);
     lyr._path.setAttribute('fill-opacity', style.fillOpacity);
     lyr._path.setAttribute('stroke', style.stroke);
@@ -714,136 +852,53 @@ function restorePolygonStyle(lyr) {
   }
 }
 
-// 読み込み済みファイル表示更新
-// ピンや圃場がクリックされた時の処理
-function onFeatureClick(e) {
-    // 1. 座標を取得
-    var latlng = e.latlng || (e.target.getLatLng ? e.target.getLatLng() : e.target.getBounds().getCenter());
-    var lat = latlng.lat;
-    var lng = latlng.lng;
-
-    // 2. GoogleマップURLの作成（検索窓に座標を入れる公式URL）
-    var googleMapUrl = "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
-    
-    // 3. ボタンエリアのHTML作成
-    var btnHtml = '<button type="button" style="flex: 1; height: 44px; background-color: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;">📄 詳細情報</button>';
-    btnHtml += '<a href="' + googleMapUrl + '" target="_blank" style="flex: 1; text-decoration: none;">';
-    btnHtml += '<button type="button" style="width: 100%; height: 44px; background-color: #4285F4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 Google Map</button>';
-    btnHtml += '</a>';
-    
-    // ボタンを流し込む
-    var btnArea = document.getElementById('buttonArea');
-    if (btnArea) btnArea.innerHTML = btnHtml;
-
-    // 4. 表（テーブル）の作成
-    var props = e.target.feature.properties || {};
-    var tableHtml = "<table>";
-    
-    // 緯度経度を最上段に追加
-    tableHtml += "<tr><th>経度</th><td>" + lng + "</td></tr>";
-    tableHtml += "<tr><th>緯度</th><td>" + lat + "</td></tr>";
-
-    for (var key in props) {
-        var label = propertyLabels[key] || key;
-        tableHtml += "<tr><th>" + label + "</th><td>" + escapeHtml(String(props[key] ?? "")) + "</td></tr>";
-    }
-    tableHtml += "</table>";
-    
-    // 表を流し込む
-    var detailsArea = document.getElementById('propertyDetails');
-    if (detailsArea) detailsArea.innerHTML = tableHtml;
-
-    // 5. 詳細パネルを開く
-    var panel = document.getElementById('infoPanel');
-    if (panel) {
-        panel.classList.add('open');
-    }
-} // ← ここで関数が正しく終わります
-
-// 読み込まれたファイル名の一覧を表示更新する関数
 function updateLoadedFileNamesDisplay() {
-    const displayArea = document.getElementById('loadedFileNamesDisplay');
-    if (!displayArea) return;
-
-    if (loadedFiles && loadedFiles.length > 0) {
-        let html = '<ul style="margin:0; padding-left:20px;">';
-        loadedFiles.forEach(fileName => {
-            html += `<li>${escapeHtml(fileName)}</li>`;
-        });
-        html += '</ul>';
-        displayArea.innerHTML = html;
-    } else {
-        displayArea.innerHTML = 'ファイル未読み込み';
-    }
+  const displayArea = document.getElementById('loadedFileNamesDisplay');
+  if (!displayArea) return;
+  if (loadedFileNames && loadedFileNames.length > 0) {
+    displayArea.innerHTML = '<ul>' + loadedFileNames.map(f => `<li>${escapeHtml(f)}</li>`).join('') + '</ul>';
+  } else {
+    displayArea.innerHTML = 'ファイル未読み込み';
+  }
 }
 
-// ピンや圃場がクリックされた時の処理（Google Mapボタンのみ版）
 function onFeatureClick(e) {
-    var lyr = e.target;
-    var feature = lyr.feature;
-    
-    // 座標を取得
-    var latlng = lyr.getLatLng ? lyr.getLatLng() : (e.latlng || e.target.getBounds().getCenter());
-    var lat = latlng.lat;
-    var lng = latlng.lng;
+  const lyr = e.target;
+  const feature = lyr.feature;
+  const latlng = lyr.getLatLng ? lyr.getLatLng() : (e.latlng || lyr.getBounds().getCenter());
+  const lat = latlng.lat;
+  const lng = latlng.lng;
 
-    // GoogleマップURLの作成
-    var googleMapUrl = "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
-    
-    // --- ボタンの作成（Google Mapボタンのみ） ---
-    var btnHtml = '<a href="' + googleMapUrl + '" target="_blank" style="display: block; width: 100%; text-decoration: none;">';
-    btnHtml += '<button type="button" style="width: 100%; height: 44px; background-color: #4285F4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 Google Map で場所を確認</button>';
-    btnHtml += '</a>';
-    
-    // buttonAreaにボタンを表示
-    var btnArea = document.getElementById('buttonArea');
-    if (btnArea) {
-        btnArea.innerHTML = btnHtml;
-    }
+  // GoogleマップURLの作成（標準的な検索リンク）
+  const googleMapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  
+  const btnHtml = `
+    <a href="${googleMapUrl}" target="_blank" style="display: block; width: 100%; text-decoration: none;">
+      <button type="button" style="width: 100%; height: 44px; background-color: #4285F4; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">📍 Google Map で場所を確認</button>
+    </a>`;
+  
+  if (document.getElementById('buttonArea')) {
+    document.getElementById('buttonArea').innerHTML = btnHtml;
+  }
 
-    // --- 表（テーブル）の作成 ---
-    var props = feature.properties || {};
-    var tableHtml = "<table>";
-    
-    // 緯度経度を最上段に追加
-    tableHtml += "<tr><th>経度</th><td>" + lng + "</td></tr>";
-    tableHtml += "<tr><th>緯度</th><td>" + lat + "</td></tr>";
+  const props = feature.properties || {};
+  let tableHtml = "<table>";
+  tableHtml += `<tr><th>経度</th><td>${lng}</td></tr><tr><th>緯度</th><td>${lat}</td></tr>`;
+  for (const key in props) {
+    const label = propertyLabels[key] || key;
+    tableHtml += `<tr><th>${label}</th><td>${escapeHtml(String(props[key] ?? ""))}</td></tr>`;
+  }
+  tableHtml += "</table>";
+  
+  if (document.getElementById('propertyDetails')) {
+    document.getElementById('propertyDetails').innerHTML = tableHtml;
+  }
 
-    for (var key in props) {
-        var label = propertyLabels[key] || key;
-        tableHtml += "<tr><th>" + label + "</th><td>" + escapeHtml(String(props[key] ?? "")) + "</td></tr>";
-    }
-    tableHtml += "</table>";
-    
-    // propertyDetailsに表を表示
-    var detailsArea = document.getElementById('propertyDetails');
-    if (detailsArea) {
-        detailsArea.innerHTML = tableHtml;
-    }
+  const panel = document.getElementById('infoPanel');
+  if (panel) panel.classList.add('open');
 
-    // 詳細パネルを開く
-    var panel = document.getElementById('infoPanel');
-    if (panel) {
-        panel.classList.add('open');
-    }
-
-    // 面積集計の連動
-    togglePinSelection(lyr, null);
-}
-
-// 読み込まれたファイル名の一覧を表示更新する関数
-function updateLoadedFileNamesDisplay() {
-    var displayArea = document.getElementById('loadedFileNamesDisplay');
-    if (!displayArea) return;
-
-    if (loadedFileNames && loadedFileNames.length > 0) {
-        var html = '<ul>' + loadedFileNames.map(function(f) { 
-            return '<li>' + escapeHtml(f) + '</li>'; 
-        }).join('') + '</ul>';
-        displayArea.innerHTML = html;
-    } else {
-        displayArea.innerHTML = 'ファイル未読み込み';
-    }
+  // 面積集計の連動
+  togglePinSelection(lyr, null);
 }
 </script>
 </body>
