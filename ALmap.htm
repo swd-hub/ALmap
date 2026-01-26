@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -34,7 +35,6 @@
       background-size: 14px 14px;
     }
 
-
     /* --- スイッチ --- */
     .mode-switch-container {
       background-color: #e3f2fd; border: 1px solid #90caf9; padding: 8px; border-radius: 5px; margin-bottom: 10px;
@@ -47,6 +47,13 @@
       background: #f8c363; border: 1px solid #d98400; border-radius: 5px; cursor: pointer;
     }
     #outbtn:hover { background: #ffca28; }
+
+    /* --- キャプチャボタン --- */
+    .capture-btn {
+      margin: 8px 0; width: 100%; height: 36px; font-size: 16px;
+      background: #4CAF50; border: 1px solid #388E3C; border-radius: 5px; cursor: pointer; color: white; font-weight: bold;
+    }
+    .capture-btn:hover { background: #66BB6A; }
 
     /* --- 詳細パネル --- */
     .info-panel {
@@ -84,21 +91,19 @@
       border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; width: 100%;
     }
     #clearSelectedFeaturesBtn:hover { background-color: #d32f2f; }
-    /* ボタンエリアのスタイル */
-#buttonArea {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding: 5px 0;
-}
 
-/* テーブルがボタンに被らないようにする */
-#propertyDetails table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 5px;
-}
-    
+    #buttonArea {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      padding: 5px 0;
+    }
+
+    #propertyDetails table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -114,7 +119,6 @@
   <button id="searchBtn" style="width: 22%; cursor:pointer;">検索</button>
   <button id="searchClearBtn" style="width: 22%; margin-left: 2%; cursor:pointer;">クリア</button>
 
-  <!-- 🆕 検索結果リスト表示エリア -->
   <div id="searchResultsContainer" style="margin-top: 10px; display: none;">
     <div style="font-size: 12px; color: #999; margin-bottom: 5px;">
       <strong>検索結果：</strong><span id="resultCount">0</span>件
@@ -129,14 +133,11 @@
   </div>
 </div>
   
-  
   <div id="areaCalcSection">
     <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
     <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
       ピンまたは圃場(集計ON時)をクリック
     </div>
-    
-    
     <button id="clearSelectedFeaturesBtn">集計クリア</button>
   </div>
   
@@ -145,7 +146,6 @@
   <div id="loadedFileNamesDisplay">ファイル未読み込み</div>
   <button id="clearAllFilesBtn" style="width:100%; background:#ff5252; color:white; border:none; padding:8px; margin-top:5px; border-radius:5px; cursor:pointer; font-weight:bold;">読み込んだ全ファイルを解除</button>
 
-  
   <hr>
   <h4 style="margin:5px 0;">スタイル定義（CSV）</h4>
   <input type="file" id="styleFileInput" accept=".csv" style="width:100%;" />
@@ -166,6 +166,10 @@
   <div id="legend"></div>
 
   <button id="outbtn">作物をGeoJSONで保存</button>
+  
+  <!-- キャプチャボタン -->
+  <button id="captureMapBtn" class="capture-btn">📸 地図をPNGでキャプチャ</button>
+  <button id="captureSvgBtn" class="capture-btn" style="background: #2196F3; border-color: #1976D2;">📋 地図をSVGで保存</button>
 
 <div id="infoPanel" class="info-panel">
   <div id="infoToggle" class="toggle-btn">≡</div>
@@ -181,25 +185,21 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdom/20.0.0/jsdom.min.js"></script>
 
 <script>
-let selectedFeatures = []; // 選択されたピン（面積集計用）
+let selectedFeatures = [];
 let loadedFileNames = [];
 let map;
 let polygonLayerGroup;
 let markerLayerGroup;
 let tibanLayerGroup;
-let loadedFiles = []; // 読み込んだファイル名を保持する配列
+let loadedFiles = [];
 
-// プロパティ日本語ラベル（緯度経度を追加）
 const propertyLabels = {
-  // 座標情報
   Longitude: "経度",
   Latitude: "緯度",
-
-  // 基本情報
   FarmCommitteeCd: "農業委員会コード",
   FarmCommitteeName: "農業委員会名",
   TodofukenCode: "都道府県コード",
@@ -242,7 +242,6 @@ const propertyLabels = {
   daicho_shubetsu_cd: "台帳種別コード"
 };
 
-// --- 初期の色定義（CSV未読み込み時のフォールバック） ---
 let styleMap = {
   "主食用きぬむすめ": { color: "#90ee90", hatched: false },
   "主食用つや姫": { color: "#ffc0cb", hatched: false },
@@ -266,22 +265,18 @@ let styleMap = {
 
 let cropOrder = Object.keys(styleMap);
 
-// 正規化ユーティリティ
 function normalizeCrop(name) {
   if (name === null || name === undefined) return "";
   return String(name).replace(/\u3000/g, " ").replace(/\s+/g, "").trim();
 }
 
-// ハッチ判定（CSVで指定された値を尊重）
 function isHatchedCrop(cropName) {
   const n = normalizeCrop(cropName);
   if (!n) return false;
   if (styleMap[n] && typeof styleMap[n].hatched !== "undefined") return !!styleMap[n].hatched;
-  // 既存ロジックの後方互換（名前から推定）
   return n.includes("飼料用") || n.includes("WCS用");
 }
 
-// 稲WCS用 -> 主食用ベース名推測（既存の互換処理を継承）
 function getBaseCropNameForHatching(cropName) {
   const crop = normalizeCrop(cropName);
   if (crop && crop.startsWith("稲WCS用")) {
@@ -292,7 +287,6 @@ function getBaseCropNameForHatching(cropName) {
   return crop;
 }
 
-// SVGパターンを地図のSVG rendererに注入する（ID管理付き）
 function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
   if (!mapInstance) return;
   const renderer = mapInstance.getRenderer(mapInstance);
@@ -303,7 +297,7 @@ function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
     defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
     svg.insertBefore(defs, svg.firstChild);
   }
-  if (defs.querySelector(`#${patternId}`)) return; // 既にある
+  if (defs.querySelector(`#${patternId}`)) return;
   const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
   pattern.setAttribute("id", patternId);
   pattern.setAttribute("patternUnits", "userSpaceOnUse");
@@ -326,19 +320,15 @@ function injectSvgHatchPattern(mapInstance, patternId, backgroundColor) {
   defs.appendChild(pattern);
 }
 
-// ポリゴン描画スタイル取得（選択時オプションあり）
-// 戻り値の fill は SVG の場合 url(#id) か色
 function getPolygonRenderStyle(cropName, isSelected = false) {
   let currentFill, currentFillOpacity = "0.7", currentStroke = "#d00", currentStrokeWidth = "2";
   if (isSelected) { currentStroke = "#0057ff"; currentStrokeWidth = "4"; }
   const n = normalizeCrop(cropName);
   if (!n) { currentFill = "transparent"; currentFillOpacity = "0.0"; }
   else if (isHatchedCrop(n)) {
-    // ベース色取得（WCS用なら主食用の色を使うケースを考慮）
     const base = getBaseCropNameForHatching(n);
     const bg = (styleMap[base] && styleMap[base].color) || (styleMap[n] && styleMap[n].color) || "#e88";
     if (map) {
-      // IDは crop名の文字コード列 + map id でユニーク化
       const safeId = (base || n).split('').map(c => c.charCodeAt(0)).join('-');
       const pid = `hatch-${safeId}-${map._leaflet_id}`;
       injectSvgHatchPattern(map, pid, bg);
@@ -350,7 +340,6 @@ function getPolygonRenderStyle(cropName, isSelected = false) {
   return { fill: currentFill, fillOpacity: currentFillOpacity, stroke: currentStroke, strokeWidth: currentStrokeWidth };
 }
 
-// 凡例描画（現在の styleMap と cropOrder に基づく）
 function createCropLegend(crops) {
   const legendDiv = document.getElementById("legend");
   let html = "";
@@ -367,7 +356,6 @@ function createCropLegend(crops) {
   legendDiv.innerHTML = html;
 }
 
-// HTMLエスケープ（凡例文字列に念のため）
 function escapeHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
@@ -376,9 +364,9 @@ function getSelectedCrop() {
   const c = document.querySelector('input[name="crop"]:checked');
   return c ? c.value.replace(/\u3000/g, " ").replace(/\s+/g, "").trim() : null;
 }
+
 function isAreaCalcMode() { return document.getElementById("areaCalcSwitch").checked; }
 
-// ピン選択の追加/削除/トグル
 function togglePinSelection(marker, forceState = null) {
   const idx = selectedFeatures.findIndex(sel => sel.lyr === marker);
   let isAdded = false;
@@ -387,30 +375,24 @@ function togglePinSelection(marker, forceState = null) {
     if (idx === -1) { selectedFeatures.push({ lyr: marker, feature: marker.feature }); isAdded = true; }
   } else if (forceState === false) {
     if (idx >= 0) selectedFeatures.splice(idx, 1);
-  } else { // toggle
+  } else {
     if (idx >= 0) selectedFeatures.splice(idx, 1);
     else { selectedFeatures.push({ lyr: marker, feature: marker.feature }); isAdded = true; }
   }
 
   updateAreaTable();
 
-  // --- ここから追加・修正 ---
-  // 表示用のデータを準備
   const props = marker.feature.properties || {};
   const coords = marker.feature.geometry ? marker.feature.geometry.coordinates : null;
   
   if (isAdded || (forceState === null && idx === -1)) {
     let html = "<table>";
 
-    // 1. 緯度経度を最初に追加
     if (coords && coords.length >= 2) {
-      // 経度 (coordinates[0])
       html += `<tr><td>${propertyLabels.Longitude || "経度"}</td><td>${coords[0]}</td></tr>`;
-      // 緯度 (coordinates[1])
       html += `<tr><td>${propertyLabels.Latitude || "緯度"}</td><td>${coords[1]}</td></tr>`;
     }
 
-    // 2. その他のプロパティをループで追加
     for (const key in props) {
       const jp = propertyLabels[key] || key;
       html += `<tr><td>${jp}</td><td>${escapeHtml(String(props[key] ?? ""))}</td></tr>`;
@@ -419,7 +401,6 @@ function togglePinSelection(marker, forceState = null) {
     html += "</table>";
     document.getElementById("propertyDetails").innerHTML = html;
   } else {
-    // 選択解除された場合は詳細表示をクリアする（必要に応じて）
     document.getElementById("propertyDetails").innerHTML = "";
   }
 }
@@ -452,6 +433,77 @@ function updateAreaTable() {
   document.getElementById("details").innerHTML = html;
 }
 
+// 🆕 改善版キャプチャ関数：Canvas → SVG変換
+async function captureMapAsImage() {
+  try {
+    const mapContainer = document.getElementById("map");
+    const canvas = await html2canvas(mapContainer, {
+      useCORS: true,
+      logging: false,
+      scale: 2
+    });
+    
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `MapCapture_${new Date().getTime()}.png`;
+    link.click();
+    alert("PNGでキャプチャしました");
+  } catch (err) {
+    alert(`キャプチャエラー: ${err.message}`);
+  }
+}
+
+// 🆕 改善版SVG保存：html2canvas → Canvas → SVGに変換
+async function captureMapAsSvg() {
+  try {
+    // 1. 地図全体をCanvasにレンダリング
+    const mapContainer = document.getElementById("map");
+    const canvas = await html2canvas(mapContainer, {
+      useCORS: true,
+      logging: false,
+      scale: 2
+    });
+
+    // 2. CanvasからPNG DataURLを取得
+    const pngDataUrl = canvas.toDataURL("image/png");
+
+    // 3. SVGを作成してCanvas画像を埋め込む
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("xmlns", svgNs);
+
+    // 背景画像として追加
+    const image = document.createElementNS(svgNs, "image");
+    image.setAttribute("width", width);
+    image.setAttribute("height", height);
+    image.setAttribute("href", pngDataUrl);
+    svg.appendChild(image);
+
+    // 4. SVGを文字列にシリアライズ
+    const svgString = new XMLSerializer().serializeToString(svg);
+    
+    // 5. SVGファイルとしてダウンロード
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `MapCapture_${new Date().getTime()}.svg`;
+    link.click();
+    
+    URL.revokeObjectURL(url);
+    alert("SVGで保存しました（地図・ピン・地番を含む）");
+  } catch (err) {
+    alert(`SVG保存エラー: ${err.message}`);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function() {
   const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
   const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles © Esri" });
@@ -471,47 +523,42 @@ document.addEventListener("DOMContentLoaded", function() {
   document.addEventListener("mousemove", (e) => { if(isResizing) panel.style.width = Math.min(Math.max(e.clientX, 200), 600) + "px"; });
   document.addEventListener("mouseup", () => { isResizing = false; document.body.style.cursor = "default"; });
 
-  // --- 追加：読み込んだ全ファイルを解除する処理 ---
   const clearBtn = document.getElementById("clearAllFilesBtn");
   if (clearBtn) {
     clearBtn.addEventListener("click", function() {
       if (!confirm("読み込んだすべてのファイルを地図から削除し、リセットしますか？")) return;
 
-      // 1. 地図上のレイヤーをすべて消去
       polygonLayerGroup.clearLayers();
       markerLayerGroup.clearLayers();
       tibanLayerGroup.clearLayers();
 
-      // 2. 内部変数をリセット
       loadedFileNames = [];
       if (typeof loadedFiles !== 'undefined') loadedFiles = [];
       selectedFeatures = [];
 
-      // 3. UI表示をリセット
       updateLoadedFileNamesDisplay();
       updateAreaTable();
       document.getElementById("propertyDetails").innerHTML = "";
       if (document.getElementById("buttonArea")) document.getElementById("buttonArea").innerHTML = "";
-      document.getElementById("fileInput").value = ""; // 同じファイルを再読込可能にする
-
+      document.getElementById("fileInput").value = "";
     });
   }
 
-  // 集計クリアボタン
   document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
     selectedFeatures = []; 
     updateAreaTable();
     document.getElementById("propertyDetails").innerHTML = "";
   });
 
+  // キャプチャボタンのイベントリスナー
+  document.getElementById("captureMapBtn").addEventListener("click", captureMapAsImage);
+  document.getElementById("captureSvgBtn").addEventListener("click", captureMapAsSvg);
+
   updateLoadedFileNamesDisplay();
   createCropLegend(cropOrder);
 
   map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
 
-  // --- 以下、ファイル読み込みや検索ボタンのロジックが続きます ---
-
-  // ---------- ファイル読み込み（GeoJSON 複数） ----------
   document.getElementById("fileInput").addEventListener("change", function(event) {
     const files = event.target.files; if (!files.length) return;
     let processed = 0;
@@ -532,11 +579,9 @@ document.addEventListener("DOMContentLoaded", function() {
           const geojson = JSON.parse(e.target.result);
           L.geoJSON(geojson, {
             onEachFeature: function(feature, lyr) {
-              // ポリゴン
               if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
                 polygonLayerGroup.addLayer(lyr);
                 restorePolygonStyle(lyr);
-                // 地番ラベル配置（簡易）
                 let coords;
                 if (feature.geometry.type === "Polygon") {
                   coords = feature.geometry.coordinates && feature.geometry.coordinates[0] && feature.geometry.coordinates[0][0];
@@ -585,18 +630,16 @@ document.addEventListener("DOMContentLoaded", function() {
                   }
                 });
               }
-              // ピン
               else if (feature.geometry.type === "Point") {
                 const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
                 lastLoadedPinLatLng = latlng;
                 const marker = L.marker(latlng);
                 marker.feature = feature;
                 markerLayerGroup.addLayer(marker);
-				marker.on("click", function(ev) {
-				  L.DomEvent.stopPropagation(ev);
-				  // 新しい関数を呼び出す（これでボタンが表示されるようになります）
-				  onFeatureClick(ev);
-				});
+                marker.on("click", function(ev) {
+                  L.DomEvent.stopPropagation(ev);
+                  onFeatureClick(ev);
+                });
                 if (feature.properties && feature.properties.Tiban) {
                   tibanLayerGroup.addLayer(L.marker(latlng, {
                     icon: L.divIcon({className:"tiban-label", html:feature.properties.Tiban, iconSize:null}), interactive:false
@@ -619,64 +662,22 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 
-
-// ---------- GeoJSON 保存（ファイル名クリーンアップ＋日付形式版） ----------
   document.getElementById('outbtn').addEventListener('click', async function() {
     const geojson = polygonLayerGroup.toGeoJSON();
-    
-    // 1. ファイル名の接頭辞（団体名など）を作成
-    let prefix = "";
-    if (loadedFileNames && loadedFileNames.length > 0) {
-      let rawName = loadedFileNames[0];
-      prefix = rawName
-        .replace(/\.geojson$/i, "")         // 拡張子を消す
-        .replace(/MapData.*/i, "")          // MapData以降を消す
-        .replace(/matched.*/i, "")          // matched以降を消す
-        .replace(/polygons.*/i, "")         // polygons以降を消す
-        .replace(/_+$/, "");                // 文末のアンダースコアを消す
-    }
-    
-    // 2. 謎の数字を「20260121_0858」のような読みやすい形式に変換
-    const now = new Date();
-    const dateStr = now.getFullYear() + 
-        ("0" + (now.getMonth() + 1)).slice(-2) + 
-        ("0" + now.getDate()).slice(-2) + "_" + 
-        ("0" + now.getHours()).slice(-2) + 
-        ("0" + now.getMinutes()).slice(-2);
-    
-    // 3. 最終的なファイル名を組み立て
-    const fname = prefix 
-      ? `${prefix}MapData_polygons_${dateStr}.geojson` 
-      : `MapData_polygons_${dateStr}.geojson`;
-
     const dataStr = JSON.stringify(geojson, null, 2);
-
-    // 4. 保存実行
+    const fname = `MapData_${new Date().getTime()}.geojson`;
     if (window.showSaveFilePicker) {
       try {
-        const handle = await window.showSaveFilePicker({ 
-          suggestedName: fname, 
-          types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] 
-        });
-        const writable = await handle.createWritable(); 
-        await writable.write(new Blob([dataStr], {type:'application/json'})); 
-        await writable.close();
-        alert('保存しました：' + fname);
-      } catch(e) {
-        if (e.name !== 'AbortError') {
-          console.error("Save error:", e);
-          alert('保存に失敗しました');
-        }
-      }
+        const handle = await window.showSaveFilePicker({ suggestedName: fname, types: [{description:'GeoJSON', accept:{'application/json':['.geojson']}}] });
+        const writable = await handle.createWritable(); await writable.write(new Blob([dataStr], {type:'application/json'})); await writable.close();
+        alert('保存しました');
+      } catch(e) {}
     } else {
-      const a = document.createElement('a'); 
-      a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
-      a.download = fname; 
-      a.click();
+      const a = document.createElement('a'); a.href = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
+      a.download = fname; a.click();
     }
   });
 
-  // ---------- スタイルCSV読み込み（name,color,hatched） ----------
   document.getElementById("styleFileInput").addEventListener("change", function(ev) {
     const file = ev.target.files && ev.target.files[0];
     if (!file) return;
@@ -689,7 +690,6 @@ document.addEventListener("DOMContentLoaded", function() {
           document.getElementById("styleFileNameDisplay").innerText = "読み込みに失敗しました（CSV形式を確認）";
           return;
         }
-        // styleMap を置換（既存に無い項目は追加、既存のものは上書き）
         const newStyleMap = {};
         parsed.forEach(row => {
           const name = normalizeCrop(row.name || row.name_raw);
@@ -698,14 +698,12 @@ document.addEventListener("DOMContentLoaded", function() {
           const hatched = (String(row.hatched || "").toLowerCase() === "true");
           newStyleMap[name] = { color, hatched };
         });
-        // 「その他」は常に残したい場合、未指定なら追加
         if (!newStyleMap["その他"]) newStyleMap["その他"] = styleMap["その他"] || { color: "#bdbdbd", hatched: true };
 
         styleMap = newStyleMap;
         cropOrder = Object.keys(styleMap);
         createCropLegend(cropOrder);
         document.getElementById("styleFileNameDisplay").innerText = `読み込み済: ${file.name}`;
-        // 全ポリゴンのスタイルを更新（凡例変更反映）
         polygonLayerGroup.eachLayer(restorePolygonStyle);
       } catch(err) {
         document.getElementById("styleFileNameDisplay").innerText = `読み込みエラー: ${err}`;
@@ -714,15 +712,11 @@ document.addEventListener("DOMContentLoaded", function() {
     reader.readAsText(file, "utf-8");
   });
 
-  // CSVパース（簡易だがヘッダ対応、UTF-8 BOM対応）
   function parseCsvStyle(text) {
     if (!text) return null;
-    // BOM除去
     text = text.replace(/^\uFEFF/, "");
-    // 行分割（CRLF/CR/LF）
     const rows = text.split(/\r\n|\n|\r/).filter(r => r.trim() !== "");
     if (rows.length === 0) return [];
-    // ヘッダ解析（カンマ区切り想定）
     const header = rows[0].split(",").map(h => h.trim().toLowerCase());
     const nameIdx = header.findIndex(h => h === "name" || h === "名称" || h === "name_raw");
     const colorIdx = header.findIndex(h => h === "color" || h === "色" || h === "colour");
@@ -744,15 +738,6 @@ document.addEventListener("DOMContentLoaded", function() {
   updateLoadedFileNamesDisplay();
   createCropLegend(cropOrder);
 
-  document.getElementById("clearSelectedFeaturesBtn").addEventListener("click", function() {
-    selectedFeatures = []; updateAreaTable();
-    document.getElementById("propertyDetails").innerHTML = "";
-  });
-
-  map.on('overlayadd', (e) => { if (e.layer === polygonLayerGroup) polygonLayerGroup.eachLayer(restorePolygonStyle); });
-
-
-// --- 1. 住所・地番検索の本体 ---
   function searchTiban() {
     const inputVal = document.getElementById("searchInput").value.trim();
     if (!inputVal) {
@@ -760,7 +745,6 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
 
-    // 全角・半角や空白を整える
     const normalize = (str) => {
       if (!str) return "";
       return str.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
@@ -771,7 +755,6 @@ document.addEventListener("DOMContentLoaded", function() {
     const target = normalize(inputVal);
     const results = [];
 
-    // markerLayerGroup内のピンを検索
     markerLayerGroup.eachLayer(function(layer) {
       const props = layer.feature && layer.feature.properties;
       if (props) {
@@ -804,7 +787,6 @@ document.addEventListener("DOMContentLoaded", function() {
         resultList.appendChild(item);
       });
 
-      // 1件なら即座に移動
       if (results.length === 1) {
         map.setView(results[0].getLatLng(), 19);
         results[0].fire('click');
@@ -815,7 +797,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // --- 2. イベントリスナーの登録 ---
   document.getElementById("searchBtn").addEventListener("click", searchTiban);
   document.getElementById("searchInput").addEventListener("keypress", function(e) {
     if (e.key === "Enter") searchTiban();
@@ -827,10 +808,7 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("searchResults").innerHTML = "";
     document.getElementById("resultCount").textContent = "0";
   });
-
-}); // ここで冒頭の DOMContentLoaded を確実に閉じます
-
-// --- 3. 独立した関数群（DOMContentLoadedの外側に配置） ---
+});
 
 function restorePolygonStyle(lyr) {
   const crop = normalizeCrop(lyr.feature.properties?.SelectedCrop);
@@ -869,7 +847,6 @@ function onFeatureClick(e) {
   const lat = latlng.lat;
   const lng = latlng.lng;
 
-  // GoogleマップURLの作成（標準的な検索リンク）
   const googleMapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
   
   const btnHtml = `
@@ -897,7 +874,6 @@ function onFeatureClick(e) {
   const panel = document.getElementById('infoPanel');
   if (panel) panel.classList.add('open');
 
-  // 面積集計の連動
   togglePinSelection(lyr, null);
 }
 </script>
