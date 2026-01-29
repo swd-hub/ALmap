@@ -103,6 +103,14 @@
       border-collapse: collapse;
       margin-top: 5px;
     }
+    /* キャプチャ時のポリゴンズレを抑制 */
+.leaflet-zoom-animated {
+    will-change: auto !important;
+}
+.leaflet-overlay-pane svg {
+    pointer-events: auto !important;
+}
+    
   </style>
 </head>
 <body>
@@ -432,44 +440,78 @@ function updateAreaTable() {
   document.getElementById("details").innerHTML = html;
 }
 
-// 🆕 改善版キャプチャ関数：Canvas → SVG変換
+// 🛠️【完全修正版】座標計算をhtml2canvasに任せない設定
 async function captureMapAsImage() {
   try {
     const mapContainer = document.getElementById("map");
+    
+    // 描画を強制更新
+    map.invalidateSize();
+
+    // html2canvasを実行
     const canvas = await html2canvas(mapContainer, {
       useCORS: true,
       logging: false,
-      scale: 2
+      scale: 2,           // 高画質
+      backgroundColor: null,
+      // 🔴 ズレの主犯「スクロール」と「オフセット」を強制リセット
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: mapContainer.clientWidth,
+      windowHeight: mapContainer.clientHeight,
+      x: 0,
+      y: 0
     });
     
     const link = document.createElement("a");
     link.href = canvas.toDataURL("image/png");
     link.download = `MapCapture_${new Date().getTime()}.png`;
     link.click();
-    alert("PNGでキャプチャしました");
+    alert("PNGで保存しました。ズレを確認してください。");
   } catch (err) {
-    alert(`キャプチャエラー: ${err.message}`);
+    alert(`エラー: ${err.message}`);
+    console.error(err);
   }
 }
 
-// 🆕 改善版SVG保存：html2canvas → Canvas → SVGに変換
+// 🛠️【最終修正版】ポリゴン位置ズレ補正入り：SVG保存
 async function captureMapAsSvg() {
   try {
-    // 1. 地図全体をCanvasにレンダリング
     const mapContainer = document.getElementById("map");
+    const rect = mapContainer.getBoundingClientRect();
+
     const canvas = await html2canvas(mapContainer, {
       useCORS: true,
       logging: false,
-      scale: 2
+      scale: 2,
+      allowTaint: false,
+      width: rect.width,
+      height: rect.height,
+      x: rect.left,
+      y: rect.top,
+      // ▼▼▼ SVG保存時も同様にポリゴン位置を補正 ▼▼▼
+      onclone: function(clonedDoc) {
+        const svg = clonedDoc.querySelector('.leaflet-overlay-pane svg');
+        if (svg) {
+          const style = svg.style.transform || svg.style.webkitTransform;
+          if (style) {
+            const matches = style.match(/translate3d\(([^,]+),\s*([^,]+)/);
+            if (matches) {
+              svg.style.transform = 'none';
+              svg.style.webkitTransform = 'none';
+              svg.style.position = 'absolute';
+              svg.style.left = matches[1];
+              svg.style.top = matches[2];
+            }
+          }
+        }
+      }
+      // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
     });
 
-    // 2. CanvasからPNG DataURLを取得
     const pngDataUrl = canvas.toDataURL("image/png");
-
-    // 3. SVGを作成してCanvas画像を埋め込む
     const width = canvas.width;
     const height = canvas.height;
-
     const svgNs = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNs, "svg");
     svg.setAttribute("width", width);
@@ -477,17 +519,13 @@ async function captureMapAsSvg() {
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     svg.setAttribute("xmlns", svgNs);
 
-    // 背景画像として追加
     const image = document.createElementNS(svgNs, "image");
     image.setAttribute("width", width);
     image.setAttribute("height", height);
     image.setAttribute("href", pngDataUrl);
     svg.appendChild(image);
 
-    // 4. SVGを文字列にシリアライズ
     const svgString = new XMLSerializer().serializeToString(svg);
-    
-    // 5. SVGファイルとしてダウンロード
     const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     
@@ -497,16 +535,36 @@ async function captureMapAsSvg() {
     link.click();
     
     URL.revokeObjectURL(url);
-    alert("SVGで保存しました（地図・ピン・地番を含む）");
+    alert("SVGで保存しました");
   } catch (err) {
     alert(`SVG保存エラー: ${err.message}`);
+    console.error(err);
   }
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-  const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
-  const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles © Esri" });
-  map = L.map("map", { center: [35.404, 132.825], zoom: 17, layers: [osm], renderer: L.svg() });
+  // 🔴 ここに差し込む：ポリゴン等の位置ズレを根本から防ぐ設定
+  L.Browser.any3d = false; 
+
+  // タイルレイヤーに crossOrigin を追加（キャプチャ時の地図欠け防止）
+  const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { 
+    maxZoom: 19, 
+    attribution: "© OpenStreetMap",
+    crossOrigin: true 
+  });
+  
+  const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { 
+    attribution: "Tiles © Esri",
+    crossOrigin: true 
+  });
+// 🔴 DOMContentLoaded 内の map 初期化部分
+map = L.map("map", { 
+    center: [35.404, 132.825], 
+    zoom: 17, 
+    layers: [osm], 
+    // paddingを0にすることで、描画範囲とHTML要素のズレを物理的に無くします
+    renderer: L.canvas({ padding: 0 }) 
+});
   setTimeout(() => map.invalidateSize(), 100);
 
   polygonLayerGroup = L.layerGroup().addTo(map);
