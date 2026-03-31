@@ -478,15 +478,35 @@ map = L.map("map", {
   center: [35.404, 132.825], 
   zoom: 17, 
   layers: [osm], 
-  preferCanvas: true // ★これを追加：SVGではなくCanvasで描画する
+  preferCanvas: true, // ★これを追加：SVGではなくCanvasで描画する
+  zoomSnap: 0.2,        // ←追加：0.5ズーム単位（1/2刻み）
+  zoomDelta: 0.2        // ←追加：ホイール1段階あたり0.5ズーム
 });
+
   setTimeout(() => map.invalidateSize(), 100);
 
   polygonLayerGroup = L.layerGroup().addTo(map);
   markerLayerGroup  = L.layerGroup().addTo(map);
   tibanLayerGroup   = L.layerGroup().addTo(map);
   L.control.layers({ "地図": osm, "衛星画像": esriSat }, { "筆ポリゴン": polygonLayerGroup, "農地ピン": markerLayerGroup, "地番ラベル": tibanLayerGroup }).addTo(map);
+  
   map.doubleClickZoom.disable();
+
+// ★ホイール感度を細かく調整
+map.scrollWheelZoom.disable();  // 標準のスクロールズームを無効化
+
+map.on('mousewheel', function(e) {
+  const delta = e.originalEvent.deltaY > 0 ? -0.1 : 0.1;  // 0.1ずつ変更
+  map.setZoom(map.getZoom() + delta);
+  L.DomEvent.preventDefault(e.originalEvent);
+});
+
+// モダンブラウザ対応
+map.on('wheel', function(e) {
+  const delta = e.originalEvent.deltaY > 0 ? -0.1 : 0.1;  // 0.1ずつ変更
+  map.setZoom(map.getZoom() + delta);
+  L.DomEvent.preventDefault(e.originalEvent);
+});
 
   document.getElementById("infoToggle").addEventListener("click", () => document.getElementById("infoPanel").classList.toggle("open"));
   const panel = document.getElementById("infoPanel"), resizer = document.getElementById("infoResizer");
