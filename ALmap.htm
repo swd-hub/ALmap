@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>圃場ハイライト＋複数ピン一括集計対応版</title>
+  <title>圃場ハイライト＋複数ピン一括集計対応版（改良１）</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     body { display: flex; margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; }
@@ -462,12 +462,12 @@ function updateAreaTable() {
 document.addEventListener("DOMContentLoaded", function() {
   const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
   const esriSat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Tiles © Esri" });
-// 初期化部分をこう書き換える
+// SVGレンダラーを使用してhatchパターンを有効にする
 map = L.map("map", { 
   center: [35.404, 132.825], 
   zoom: 17, 
   layers: [osm], 
-  preferCanvas: true // ★これを追加：SVGではなくCanvasで描画する
+  renderer: L.svg() // ★SVGレンダラー指定：ハッチ(SVGパターン)を有効にするため
 });
   setTimeout(() => map.invalidateSize(), 100);
 
@@ -633,9 +633,19 @@ if (coords && feature.properties?.Tiban) {
             if (normalizeCrop(feature.properties.SelectedCrop) === normalizeCrop(currentCrop)) {
               feature.properties.SelectedCrop = null;
               restorePolygonStyle(lyr);
+              isSelectedNow = false;
             } else {
               feature.properties.SelectedCrop = currentCrop;
-              restorePolygonStyle(lyr);
+              const style = getPolygonRenderStyle(currentCrop, true);
+              if (lyr._path) {
+                lyr._path.setAttribute('fill', style.fill);
+                lyr._path.setAttribute('fill-opacity', style.fillOpacity);
+                lyr._path.setAttribute('stroke', style.stroke);
+                lyr._path.setAttribute('stroke-width', style.strokeWidth);
+              } else {
+                const base = getBaseCropNameForHatching(currentCrop);
+                lyr.setStyle({ fillColor: style.fill === "transparent" ? "transparent" : (styleMap[base] ? styleMap[base].color : "#e88"), color: style.stroke, weight: Number(style.strokeWidth) });
+              }
               isSelectedNow = true;
             }
 
