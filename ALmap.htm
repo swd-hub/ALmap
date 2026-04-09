@@ -460,7 +460,20 @@ function updateAreaTable() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+// 1. OpenStreetMap（※ローカル環境だとはじかれて403エラーになることがあります）
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" });
+
+// 2. 国土地理院（日本国内なら最もおすすめ・エラーが出ない）
+const gsiPale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+const gsiStd = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+
+// 3. Google Maps（※非公式URLのため個人利用やテスト限定です）
+const googleMap = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}", { maxZoom: 20, attribution: "© Google" });
+
+// 4. CartoDB Positron（白地図風。ベースはOSMですが403が出にくいです）
+const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors, © CARTO" });
+
+// 5. 衛星画像
 const esriSat = L.tileLayer(
   "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community", maxZoom: 20 });
@@ -469,7 +482,7 @@ const esriSat = L.tileLayer(
 map = L.map("map", { 
   center: [35.404, 132.825], 
   zoom: 17, 
-  layers: [osm], 
+  layers: [gsiPale], // 初期表示は色塗りが見やすい「淡色地図」にしています
   renderer: L.svg() // ★SVGレンダラー指定：ハッチ(SVGパターン)を有効にするため
 });
   setTimeout(() => map.invalidateSize(), 100);
@@ -477,7 +490,20 @@ map = L.map("map", {
   polygonLayerGroup = L.layerGroup().addTo(map);
   markerLayerGroup  = L.layerGroup().addTo(map);
   tibanLayerGroup   = L.layerGroup().addTo(map);
-  L.control.layers({ "地図": osm, "衛星画像": esriSat }, { "筆ポリゴン": polygonLayerGroup, "農地ピン": markerLayerGroup, "地番ラベル": tibanLayerGroup }).addTo(map);
+  
+  // 右上のレイヤー切り替えメニュー
+  L.control.layers({ 
+    "国土地理院(淡色)": gsiPale,
+    "国土地理院(標準)": gsiStd,
+    "Googleマップ": googleMap,
+    "白地図(Carto)": cartoLight,
+    "OpenStreetMap": osm,
+    "衛星画像(Esri)": esriSat 
+  }, { 
+    "筆ポリゴン": polygonLayerGroup, 
+    "農地ピン": markerLayerGroup, 
+    "地番ラベル": tibanLayerGroup 
+  }).addTo(map);
   map.doubleClickZoom.disable();
 
   document.getElementById("infoToggle").addEventListener("click", () => document.getElementById("infoPanel").classList.toggle("open"));
