@@ -462,26 +462,36 @@ function updateAreaTable() {
 document.addEventListener("DOMContentLoaded", function() {
 // 1. OpenStreetMap JP（標準のOSMと同じ色合い・ローカルでも比較的安定）
 const osm = L.tileLayer("https://tile.openstreetmap.jp/{z}/{x}/{y}.png", { 
-    maxZoom: 19, 
+    maxNativeZoom: 19, maxZoom: 22, 
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' 
 });
 
-
 // 2. 国土地理院（日本国内なら最もおすすめ・エラーが出ない）
-const gsiPale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
-const gsiStd = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+const gsiPale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", { maxNativeZoom: 18, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+const gsiStd = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", { maxNativeZoom: 18, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
 
 // 3. Google Maps（※非公式URLのため個人利用やテスト限定です）
-const googleMap = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}", { maxZoom: 20, attribution: "© Google" });
+const googleMap = L.tileLayer("https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z}", { maxNativeZoom: 20, maxZoom: 22, attribution: "© Google" });
+const googleSat = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", { maxNativeZoom: 20, maxZoom: 22, subdomains: ["mt0", "mt1", "mt2", "mt3"], attribution: "© Google" });
 
 // 4. CartoDB Positron（白地図風。ベースはOSMですが403が出にくいです）
-const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors, © CARTO" });
+const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors, © CARTO" });
 
 // 5. 衛星画像
 const esriSat = L.tileLayer(
   "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-  { attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community", maxZoom: 20 });
+  { attribution: "Tiles &copy; Esri", maxNativeZoom: 19, maxZoom: 22 });
   
+// 6. 追加の無料地図群
+const esriStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22, attribution: 'Tiles &copy; Esri' });
+const esriTopo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22, attribution: 'Tiles &copy; Esri' });
+const cartoVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '&copy; OpenStreetMap contributors, &copy; CARTO' });
+const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '&copy; OpenStreetMap contributors, &copy; CARTO' });
+const osmHot = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '&copy; OSM contributors, Tiles by HOT hosted by OSM France' });
+const openTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxNativeZoom: 17, maxZoom: 22, attribution: 'Map data: &copy; OSM contributors, SRTM | Map style: &copy; OpenTopoMap' });
+const gsiPhoto = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", { maxNativeZoom: 18, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+const gsiRelief = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png", { maxNativeZoom: 15, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
+
 // SVGレンダラーを使用してhatchパターンを有効にする
 map = L.map("map", { 
   center: [35.404, 132.825], 
@@ -497,12 +507,21 @@ map = L.map("map", {
   
   // 右上のレイヤー切り替えメニュー
   L.control.layers({ 
-    "国土地理院(淡色)": gsiPale,
-    "国土地理院(標準)": gsiStd,
-    "Googleマップ": googleMap,
-    "白地図(Carto)": cartoLight,
     "OpenStreetMap": osm,
-    "衛星画像(Esri)": esriSat 
+    "Googleマップ": googleMap,
+    "国土地理院(標準)": gsiStd,
+    "国土地理院(淡色)": gsiPale,
+    "白地図(Carto)": cartoLight,
+    "地理院色別標高図": gsiRelief,
+    "Esri道路地図": esriStreet,
+    "Esri地形図": esriTopo,
+    "CARTO(自然色)": cartoVoyager,
+    "CARTO(ダーク)": cartoDark,
+    "OSM(HOT)": osmHot,
+    "OpenTopoMap": openTopo,
+    "Google衛星画像": googleSat,
+    "衛星画像(Esri)": esriSat,
+    "地理院最新航空写真": gsiPhoto
   }, { 
     "筆ポリゴン": polygonLayerGroup, 
     "農地ピン": markerLayerGroup, 
