@@ -470,6 +470,9 @@ const gsiPale   = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}
 const gsiStd    = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",          { maxNativeZoom: 18, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
 const gsiRelief = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",       { maxNativeZoom: 15, maxZoom: 22, attribution: "<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>国土地理院</a>" });
 
+// OSM 日本サーバー（403エラーなし・安定）
+const osmJp = L.tileLayer("https://tile.openstreetmap.jp/{z}/{x}/{y}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors" });
+
 // Carto（OSMベース・403なし・安定）
 const cartoLight   = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",          { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors, © CARTO" });
 const cartoVoyager = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxNativeZoom: 19, maxZoom: 22, attribution: "© OpenStreetMap contributors, © CARTO" });
@@ -513,6 +516,7 @@ map = L.map("map", {
     "🗺 国土地理院(淡色)": gsiPale,
     "🗺 国土地理院(標準)": gsiStd,
     "🗺 地理院色別標高図": gsiRelief,
+    "🗺 OSM (日本サーバー)": osmJp,
     "🗺 白地図(Carto)": cartoLight,
     "🗺 自然色地図(Carto Voyager)": cartoVoyager,
     "🗺 ダーク地図(Carto Dark)": cartoDark,
