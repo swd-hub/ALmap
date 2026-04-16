@@ -168,9 +168,9 @@
   <button id="outbtn">作物をGeoJSONで保存</button>
 <button id="pngCaptureBtn"
   style="width:100%; height:36px; font-size:16px;
-         background:#81c784; border:1px solid #388e3c;
+         background:#64b5f6; border:1px solid #1565c0;
          border-radius:5px; cursor:pointer; margin-top:6px;">
-  画面をPNG保存
+  圃場レイヤーをSVG保存
 </button>
 
 <div id="infoPanel" class="info-panel">
@@ -185,10 +185,10 @@
   <div id="infoResizer"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js" defer></script>
 
 
 <script>
@@ -459,7 +459,16 @@ function updateAreaTable() {
   document.getElementById("details").innerHTML = html;
 }
 
-document.addEventListener("DOMContentLoaded", function() {
+function waitForLibs(cb) {
+  if (typeof L !== "undefined" && typeof turf !== "undefined" && typeof html2canvas !== "undefined") {
+    cb();
+  } else {
+    setTimeout(function(){ waitForLibs(cb); }, 30);
+  }
+}
+document.addEventListener("DOMContentLoaded", function() { waitForLibs(initApp); });
+
+function initApp() {
 // ============================================================
 // ベース地図タイル定義
 // ============================================================
@@ -979,9 +988,137 @@ if (coords && feature.properties?.Tiban) {
     document.getElementById("resultCount").textContent = "0";
   });
 
+  // ===== SVG保存ボタン（地図タイル＋ポリゴン＋ピン＋地番ラベル全合成） =====
+  document.getElementById("pngCaptureBtn").addEventListener("click", async () => {
+    const mapEl   = document.getElementById("map");
+    const W       = mapEl.offsetWidth;
+    const H       = mapEl.offsetHeight;
+    const mapRect = mapEl.getBoundingClientRect();
+    const NS      = "http://www.w3.org/2000/svg";
 
+    // ルートSVG作成
+    const root = document.createElementNS(NS, "svg");
+    root.setAttribute("xmlns",       NS);
+    root.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    root.setAttribute("width",  W);
+    root.setAttribute("height", H);
+    root.setAttribute("viewBox", `0 0 ${W} ${H}`);
 
-}); // ここで冒頭の DOMContentLoaded を確実に閉じます
+    // ---- STEP 1: タイル画像を base64 で <image> として埋め込む ----
+    const tileEls = mapEl.querySelectorAll(".leaflet-tile-pane img.leaflet-tile");
+    await Promise.all(Array.from(tileEls).map(img => new Promise(resolve => {
+      if (!img.complete || img.naturalWidth === 0) return resolve();
+      fetch(img.src)
+        .then(r => r.blob())
+        .then(blob => new Promise((res, rej) => {
+          const reader = new FileReader();
+          reader.onload  = () => res(reader.result);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        }))
+        .then(dataUrl => {
+          const r    = img.getBoundingClientRect();
+          const iEl  = document.createElementNS(NS, "image");
+          iEl.setAttribute("x",      r.left - mapRect.left);
+          iEl.setAttribute("y",      r.top  - mapRect.top);
+          iEl.setAttribute("width",  r.width);
+          iEl.setAttribute("height", r.height);
+          iEl.setAttribute("href",   dataUrl);
+          root.appendChild(iEl);
+          resolve();
+        })
+        .catch(() => resolve());
+    })));
+
+    // ---- STEP 2: ポリゴンSVGオーバーレイ（hatchパターン含む）----
+    const overlaySvg = mapEl.querySelector(".leaflet-overlay-pane svg");
+    if (overlaySvg) {
+      const paneRect = overlaySvg.closest(".leaflet-overlay-pane").getBoundingClientRect();
+      const dx = paneRect.left - mapRect.left;
+      const dy = paneRect.top  - mapRect.top;
+
+      // defs（hatchパターン等）をルートに移植
+      const defs = overlaySvg.querySelector("defs");
+      if (defs) root.appendChild(defs.cloneNode(true));
+
+      // 描画内容を g でラップしてオフセット適用
+      const g = document.createElementNS(NS, "g");
+      g.setAttribute("transform", `translate(${dx},${dy})`);
+      Array.from(overlaySvg.childNodes).forEach(child => {
+        if (child.tagName && child.tagName.toLowerCase() !== "defs") {
+          g.appendChild(child.cloneNode(true));
+        }
+      });
+      root.appendChild(g);
+    }
+
+    // ---- STEP 3: マーカー（ピン）をSVG円で描画 ----
+    mapEl.querySelectorAll(".leaflet-marker-pane .leaflet-marker-icon").forEach(markerEl => {
+      const r  = markerEl.getBoundingClientRect();
+      if (r.width === 0) return;
+      const cx = r.left - mapRect.left + r.width  / 2;
+      const cy = r.top  - mapRect.top  + r.height / 2;
+      const circle = document.createElementNS(NS, "circle");
+      circle.setAttribute("cx", cx);
+      circle.setAttribute("cy", cy);
+      circle.setAttribute("r",  7);
+      circle.setAttribute("fill",         "#2196F3");
+      circle.setAttribute("stroke",       "#ffffff");
+      circle.setAttribute("stroke-width", "2");
+      root.appendChild(circle);
+    });
+
+    // ---- STEP 4: 地番ラベル（.tiban-label）をSVGテキストとして描画 ----
+    mapEl.querySelectorAll(".tiban-label").forEach(label => {
+      const r = label.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      const x = r.left - mapRect.left;
+      const y = r.top  - mapRect.top;
+
+      // 背景矩形
+      const rect = document.createElementNS(NS, "rect");
+      rect.setAttribute("x",      x);
+      rect.setAttribute("y",      y);
+      rect.setAttribute("width",  r.width);
+      rect.setAttribute("height", r.height);
+      rect.setAttribute("fill",   "rgba(255,255,255,0.85)");
+      rect.setAttribute("stroke", "#333");
+      rect.setAttribute("stroke-width", "1");
+      rect.setAttribute("rx", "3");
+      root.appendChild(rect);
+
+      // テキスト
+      const text = document.createElementNS(NS, "text");
+      text.setAttribute("x",           x + r.width / 2);
+      text.setAttribute("y",           y + r.height / 2 + 4);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("font-size",   "12");
+      text.setAttribute("font-weight", "bold");
+      text.setAttribute("font-family", "sans-serif");
+      text.setAttribute("fill",        "#000000");
+      text.textContent = label.textContent.trim();
+      root.appendChild(text);
+    });
+
+    // ---- STEP 5: ダウンロード ----
+    const now = new Date();
+    const ts  = now.getFullYear() +
+      ("0"+(now.getMonth()+1)).slice(-2) +
+      ("0"+now.getDate()).slice(-2) + "_" +
+      ("0"+now.getHours()).slice(-2) +
+      ("0"+now.getMinutes()).slice(-2);
+
+    const svgStr = new XMLSerializer().serializeToString(root);
+    const blob   = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+    const url    = URL.createObjectURL(blob);
+    const a      = document.createElement("a");
+    a.download   = `map_${ts}.svg`;
+    a.href       = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+} // initApp 終わり
 
 // --- 3. 独立した関数群（DOMContentLoadedの外側に配置） ---
 
@@ -1053,45 +1190,6 @@ function onFeatureClick(e) {
   // 面積集計の連動
   togglePinSelection(lyr, null);
 }
-
-document.getElementById("pngCaptureBtn").addEventListener("click", async () => {
-  const target = document.getElementById("map");
-  
-  // ズレ対策1: 地図のズレ（Transform）を確定させるために再描画
-  map.invalidateSize();
-
-  // ズレ対策2: html2canvas実行前に、LeafletのレイヤーのCSS Transformを一時的に無効化、または同期させる
-  // (html2canvasはCSSのtransform: translate3d を読み飛ばすことがあるため)
-  
-  await new Promise(r => setTimeout(r, 500)); // 描画安定待ち
-
-  html2canvas(target, {
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: "#ffffff",
-    scale: 2,
-    // ズレ対策3: 表示範囲を固定
-    width: target.offsetWidth,
-    height: target.offsetHeight,
-    // 座標計算をDOMの見た目通りに行う設定
-    ignoreElements: (element) => {
-      // コントロールボタン類を除外したい場合はここで指定
-      return element.classList.contains('leaflet-control-container');
-    }
-  }).then(canvas => {
-    const now = new Date();
-    const ts = now.getFullYear() + 
-               ("0" + (now.getMonth() + 1)).slice(-2) + 
-               ("0" + now.getDate()).slice(-2) + "_" + 
-               ("0" + now.getHours()).slice(-2) + 
-               ("0" + now.getMinutes()).slice(-2);
-
-    const link = document.createElement("a");
-    link.download = `map_capture_${ts}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  });
-});
 
 function fixPolygonCoords(coords) {
   if (!coords || !coords[0] || !coords[0][0]) return coords;
