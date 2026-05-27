@@ -203,6 +203,59 @@ let markerLayerGroup;
 let tibanLayerGroup;
 let loadedFiles = []; // 読み込んだファイル名を保持する配列
 
+// ===== Undo（Ctrl+Z）履歴 =====
+const undoStack = [];
+const MAX_UNDO = 50;
+
+function cloneLatLngs(lls) {
+  if (Array.isArray(lls)) return lls.map(cloneLatLngs);
+  return { lat: lls.lat, lng: lls.lng };
+}
+function reviveLatLngs(data) {
+  if (Array.isArray(data)) return data.map(reviveLatLngs);
+  return L.latLng(data.lat, data.lng);
+}
+function pushUndoState(layer, coords) {
+  undoStack.push({ layer, latLngs: coords });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+}
+function performUndo() {
+  if (!undoStack.length) return;
+  const { layer, latLngs } = undoStack.pop();
+  layer.setLatLngs(reviveLatLngs(latLngs));
+  layer.redraw();
+  if (layer.feature) layer.feature.geometry = layer.toGeoJSON().geometry;
+  if (layer.pm && layer.pm._enabled) layer.pm._initMarkers();
+  layer._preEditCoords = cloneLatLngs(layer.getLatLngs());
+}
+function attachUndoListeners(layer) {
+  // 編集開始時に「変更前座標」を初期化
+  layer.on('pm:enable', () => {
+    layer._preEditCoords = cloneLatLngs(layer.getLatLngs());
+  });
+  // 頂点ドラッグ完了 → ドラッグ前の座標をスタックに積む
+  layer.on('pm:markerdragend', () => {
+    if (layer._preEditCoords) {
+      pushUndoState(layer, layer._preEditCoords);
+      layer._preEditCoords = cloneLatLngs(layer.getLatLngs());
+    }
+  });
+  // 頂点追加後 → 追加前の座標をスタックに積む
+  layer.on('pm:vertexadded', () => {
+    if (layer._preEditCoords) {
+      pushUndoState(layer, layer._preEditCoords);
+      layer._preEditCoords = cloneLatLngs(layer.getLatLngs());
+    }
+  });
+  // 頂点削除後 → 削除前の座標をスタックに積む
+  layer.on('pm:vertexremoved', () => {
+    if (layer._preEditCoords) {
+      pushUndoState(layer, layer._preEditCoords);
+      layer._preEditCoords = cloneLatLngs(layer.getLatLngs());
+    }
+  });
+}
+
 // プロパティ日本語ラベル（緯度経度を追加）
 const propertyLabels = {
   // 座標情報
@@ -533,6 +586,14 @@ map = L.map("map", {
   }).addTo(map);
   map.doubleClickZoom.disable();
 
+  // Ctrl+Z でポリゴン頂点編集を1ステップ戻す
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      performUndo();
+    }
+  });
+
   // 🛟 追加点3: 画面左上に変形・移動ツールの表示設定を行う
   map.pm.addControls({
     position: 'topleft',
@@ -665,6 +726,7 @@ if (geojson && geojson.features) {
         if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
           polygonLayerGroup.addLayer(lyr);
           restorePolygonStyle(lyr);
+          attachUndoListeners(lyr); // Ctrl+Z undo 対応
 
           // 地番ラベル
           let coords;
