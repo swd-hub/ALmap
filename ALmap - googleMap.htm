@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <title>圃場ハイライト＋複数ピン一括集計対応版</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Leaflet / Geoman の CSS（CDN） -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.css" />
+
   <style>
     body { display: flex; margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; }
     #map { width: 85%; height: 100vh; }
-    #info { width: 15%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; background: #fff; }
+    #info { width: 15%; height: 100vh; overflow:auto; border-left: 1px solid #ccc; padding: 10px; background: #fff; box-sizing: border-box; }
     table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 14px; }
     td, th { border: 1px solid #ccc; padding: 4px; word-wrap: break-word; }
     th:first-child, td:first-child { width: 45%; }
@@ -33,7 +37,6 @@
       background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 2px, transparent 2px, transparent 14px);
       background-size: 14px 14px;
     }
-
 
     /* --- スイッチ --- */
     .mode-switch-container {
@@ -84,21 +87,21 @@
       border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em; width: 100%;
     }
     #clearSelectedFeaturesBtn:hover { background-color: #d32f2f; }
-    /* ボタンエリアのスタイル */
-#buttonArea {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding: 5px 0;
-}
 
-/* テーブルがボタンに被らないようにする */
-#propertyDetails table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 5px;
-}
-    
+    /* ボタンエリア */
+    #buttonArea {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+      padding: 5px 0;
+    }
+
+    /* 詳細テーブル */
+    #propertyDetails table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
@@ -106,52 +109,50 @@
 
 <div id="info">
   <h3 style="margin-top:0;">情報パネル</h3>
+
   <div style="margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-  <h4 style="margin:5px 0;">地番検索</h4>
-  <input type="text" id="searchInput" placeholder="例: 出雲市...723"
-         style="width: 50%; padding: 4px;">
+    <h4 style="margin:5px 0;">地番検索</h4>
+    <input type="text" id="searchInput" placeholder="例: 出雲市...723"
+           style="width: 50%; padding: 4px;">
 
-  <button id="searchBtn" style="width: 22%; cursor:pointer;">検索</button>
-  <button id="searchClearBtn" style="width: 22%; margin-left: 2%; cursor:pointer;">クリア</button>
+    <button id="searchBtn" style="width: 22%; cursor:pointer;">検索</button>
+    <button id="searchClearBtn" style="width: 22%; margin-left: 2%; cursor:pointer;">クリア</button>
 
-  <!-- 🆕 検索結果リスト表示エリア -->
-  <div id="searchResultsContainer" style="margin-top: 10px; display: none;">
-    <div style="font-size: 12px; color: #999; margin-bottom: 5px;">
-      <strong>検索結果：</strong><span id="resultCount">0</span>件
+    <!-- 検索結果リスト表示エリア -->
+    <div id="searchResultsContainer" style="margin-top: 10px; display: none;">
+      <div style="font-size: 12px; color: #999; margin-bottom: 5px;">
+        <strong>検索結果：</strong><span id="resultCount">0</span>件
+      </div>
+      <div id="searchResults" style="
+        border: 1px solid #ddd;
+        background: #fafafa;
+        max-height: 200px;
+        overflow-y: auto;
+        border-radius: 3px;
+      "></div>
     </div>
-    <div id="searchResults" style="
-      border: 1px solid #ddd;
-      background: #fafafa;
-      max-height: 200px;
-      overflow-y: auto;
-      border-radius: 3px;
-    "></div>
   </div>
-</div>
-  
-  
+
   <div id="areaCalcSection">
     <div style="font-size:0.9em; color:#666;">選択ピン数: <span id="pinCount">0</span></div>
     <div id="details" style="font-size:0.85em; max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:5px;">
       ピンまたは圃場(集計ON時)をクリック
     </div>
-    
-    
+
     <button id="clearSelectedFeaturesBtn">集計クリア</button>
   </div>
-  
+
   <hr>
   <input type="file" id="fileInput" accept=".geojson,.json" multiple style="width:100%;" />
   <div id="loadedFileNamesDisplay">ファイル未読み込み</div>
   <button id="clearAllFilesBtn" style="width:100%; background:#ff5252; color:white; border:none; padding:8px; margin-top:5px; border-radius:5px; cursor:pointer; font-weight:bold;">読み込んだ全ファイルを解除</button>
 
-  
   <hr>
   <h4 style="margin:5px 0;">スタイル定義（CSV）</h4>
   <input type="file" id="styleFileInput" accept=".csv" style="width:100%;" />
   <div id="styleFileNameDisplay" style="font-size:0.85em; color:#555; margin-top:5px;">スタイルファイル未読み込み</div>
   <hr>
-  
+
   <div class="mode-switch-container">
     <label class="switch-label">
       <input type="checkbox" id="areaCalcSwitch" class="switch-input" checked>
@@ -166,31 +167,29 @@
   <div id="legend"></div>
 
   <button id="outbtn">作物をGeoJSONで保存</button>
-<button id="pngCaptureBtn"
-  style="width:100%; height:36px; font-size:16px;
-         background:#81c784; border:1px solid #388e3c;
-         border-radius:5px; cursor:pointer; margin-top:6px;">
-  画面をPNG保存
-</button>
+  <button id="pngCaptureBtn"
+    style="width:100%; height:36px; font-size:16px;
+           background:#81c784; border:1px solid #388e3c;
+           border-radius:5px; cursor:pointer; margin-top:6px;">
+    圃場レイヤーをSVG保存
+  </button>
+</div><!-- /#info -->
 
 <div id="infoPanel" class="info-panel">
   <div id="infoToggle" class="toggle-btn">≡</div>
   <div id="infoContent">
     <h3 class="info-title">詳細情報</h3>
-    
-    <div id="buttonArea" style="display: flex; gap: 10px; margin-bottom: 15px; padding: 0 5px;"></div>
-    
+    <div id="buttonArea"></div>
     <div id="propertyDetails"></div>
   </div>
   <div id="infoResizer"></div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-
-
+<!-- ライブラリ（読み込みは defer。順番はこのままにしてください） -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.14.2/dist/leaflet-geoman.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js" defer></script>
 <script>
 let selectedFeatures = []; // 選択されたピン（面積集計用）
 let loadedFileNames = [];
